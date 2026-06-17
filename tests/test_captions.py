@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from clipper.captions import format_ass_time, generate_ass_for_clip, group_into_lines, WordTiming
+from clipper.captions import (
+    build_overlay_events,
+    format_ass_time,
+    generate_ass_for_clip,
+    group_into_lines,
+    WordTiming,
+)
 from clipper.transcribe import Word
 
 
@@ -45,6 +51,28 @@ def test_generate_ass_rebases_and_highlights():
     assert "1:40:00" not in ass
     # surlignage du mot actif present
     assert "\\fscx112" in ass
+
+
+def test_overlay_events_cover_full_duration():
+    words = [WordTiming(1.0, 1.4, "a"), WordTiming(1.4, 1.8, "b"), WordTiming(5.0, 5.4, "c")]
+    events = build_overlay_events(words, clip_dur=8.0)
+    # couverture continue de 0 a clip_dur, sans trou ni recouvrement
+    assert events[0].start == 0.0
+    assert abs(events[-1].end - 8.0) < 1e-6
+    for prev, nxt in zip(events, events[1:]):
+        assert abs(prev.end - nxt.start) < 1e-6
+    # les silences (debut, pause, fin) sont marques active=-1
+    assert events[0].active == -1
+    # au moins un evenement surligne un mot reel
+    assert any(ev.active >= 0 and ev.words for ev in events)
+
+
+def test_overlay_event_highlights_correct_word():
+    words = [WordTiming(0.0, 0.4, "un"), WordTiming(0.4, 0.8, "deux")]
+    events = build_overlay_events(words, clip_dur=1.0)
+    spoken = [ev for ev in events if ev.active >= 0]
+    assert spoken[0].words[spoken[0].active] == "un"
+    assert spoken[1].words[spoken[1].active] == "deux"
 
 
 def test_generate_ass_filters_out_of_range_words():

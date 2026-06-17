@@ -99,6 +99,17 @@ uv run pytest -q
 
 Couvre le parsing robuste de la réponse LLM, l'alignement des segments sur les frontières de phrase, le calcul du crop 9:16 et la génération ASS.
 
+## Sous-titres : deux chemins de rendu
+
+Le surlignage mot à mot est généré à partir des timestamps réels. Le rendu s'adapte automatiquement aux capacités de ton ffmpeg :
+
+- **ffmpeg avec libass** : incrustation native du fichier ASS karaoké (chemin canonique, le plus rapide).
+- **ffmpeg sans libass** (cas des builds Homebrew minimaux) : bascule automatique sur un **overlay d'images PNG** rendu avec Pillow, incrusté via le démultiplexeur `concat` et le filtre `overlay` (cœur de ffmpeg). Aucune dépendance système, 100 % hors-ligne. Le fichier `subs.ass` reste produit dans chaque dossier de clip comme artefact portable.
+
+Le pipeline détecte le backend disponible au lancement (ligne de log « Sous-titres : ... »). Pour forcer le chemin libass natif, installe un ffmpeg compilé avec `--enable-libass` (par exemple via le tap `homebrew-ffmpeg/ffmpeg` avec l'option `--with-libass`, ou un build statique). Le chemin overlay donne un rendu équivalent sans rien installer.
+
+La police des sous-titres est configurable via `FONT_PATH` et `CAPTION_FONT_SIZE` (défaut : Arial Bold, taille 76).
+
 ## Détection de visage
 
 Le recadrage utilise **MediaPipe Tasks** (`FaceDetector`, modèle `blaze_face_short_range.tflite` téléchargé une fois dans `cache/models/`). Si le modèle n'est pas téléchargeable (hors-ligne au premier lancement), l'outil bascule automatiquement sur le détecteur **Haar d'OpenCV**, livré avec la dépendance, donc 100 % hors-ligne.
