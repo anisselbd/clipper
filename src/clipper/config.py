@@ -37,6 +37,8 @@ class Config:
     # Desactive le mode "thinking" (Qwen3 et co.) : selection plus rapide, JSON
     # direct. Sans effet sur les modeles dont le template l'ignore.
     llm_disable_thinking: bool = field(default_factory=lambda: _env_bool("LLM_DISABLE_THINKING", True))
+    # Reessais par fenetre si la reponse n'est pas un JSON exploitable.
+    llm_retries: int = field(default_factory=lambda: int(os.getenv("LLM_RETRIES", "2")))
 
     # --- Transcription (faster-whisper) ---
     whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "small"))

@@ -358,11 +358,12 @@ def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegm
     provider = get_provider(config)
     system = SYSTEM_PROMPT.format(min_dur=min_dur, max_dur=max_dur, n=n)
 
+    retries = max(1, config.llm_retries)
     try:
         collected: list[SelectedSegment] = []
         windows = _windows(transcript.segments)
         logger.info("Selection LLM (%s) sur %d fenetre(s)...", provider.name, len(windows))
-        for win in windows:
+        for wi, win in enumerate(windows):
             view = render_transcript_view(win)
             user = (
                 "Transcript (timestamps en secondes) :\n\n"
@@ -370,13 +371,28 @@ def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegm
                 f"Selectionne les meilleurs clips ({min_dur:.0f}-{max_dur:.0f}s). "
                 "Reponds uniquement avec le tableau JSON."
             )
-            raw_text = provider.complete(system, user, temperature=0.2, max_tokens=2048)
-            raw = parse_llm_segments(raw_text)
-            collected.extend(
-                validate_segments(
-                    raw, transcript, min_dur=min_dur, max_dur=max_dur, source="llm"
+            # Temperature 0 (deterministe, meilleur suivi du format) + reessais
+            # si la reponse n'est pas un JSON exploitable.
+            raw: list[dict] | None = None
+            for attempt in range(retries):
+                raw_text = provider.complete(system, user, temperature=0.0, max_tokens=2048)
+                try:
+                    parsed = parse_llm_segments(raw_text)
+                except ValueError:
+                    parsed = []
+                if parsed:
+                    raw = parsed
+                    break
+                logger.warning(
+                    "Fenetre %d : reponse LLM non exploitable (essai %d/%d).",
+                    wi + 1, attempt + 1, retries,
                 )
-            )
+            if raw:
+                collected.extend(
+                    validate_segments(
+                        raw, transcript, min_dur=min_dur, max_dur=max_dur, source="llm"
+                    )
+                )
         selected = dedup_and_rank(collected, n)
         if selected:
             logger.info("Selection LLM : %d clip(s) retenu(s).", len(selected))
@@ -384,8 +400,6 @@ def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegm
         logger.warning("Le LLM n'a renvoye aucun segment valide, bascule heuristique.")
     except ProviderUnavailable as exc:
         logger.warning("LLM indisponible (%s). Bascule sur le fallback heuristique.", exc)
-    except ValueError as exc:
-        logger.warning("Reponse LLM inexploitable (%s). Bascule heuristique.", exc)
 
     selected = heuristic_select(transcript, n=n, min_dur=min_dur, max_dur=max_dur)
     logger.info("Selection heuristique : %d clip(s).", len(selected))
