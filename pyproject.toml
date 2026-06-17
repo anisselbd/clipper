@@ -1,0 +1,29 @@
+[project]
+name = "clipper"
+version = "0.1.0"
+description = "Moteur de clipping video local-first : URL -> clips verticaux 9:16 sous-titres mot a mot"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+authors = [
+    { name = "Anisselbd" }
+]
+dependencies = [
+    "faster-whisper>=1.2.1",
+    "httpx>=0.28.1",
+    "mediapipe>=0.10.35",
+    "python-dotenv>=1.2.2",
+    "scenedetect>=0.7",
+    "yt-dlp>=2026.6.9",
+]
+
+[project.scripts]
+clipper = "clipper.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.18,<0.12.0"]
+build-backend = "uv_build"

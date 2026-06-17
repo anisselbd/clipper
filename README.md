@@ -1,0 +1,136 @@
+# clipper
+
+Moteur de clipping vidéo **local-first** dans l'esprit d'Opus Clip, conçu pour tourner sur un MacBook Pro Apple Silicon (M4). On donne une URL (YouTube en priorité), l'outil télécharge la vidéo, repère les meilleurs moments, les découpe en clips verticaux 9:16, recadre sur le visage dominant et incruste des sous-titres mot à mot générés à partir de l'audio réel.
+
+## Ce que l'outil fait et ne fait pas
+
+L'outil **découpe de l'existant**, il ne crée rien :
+
+- Pas de génération de script, pas d'histoire inventée.
+- Pas de TTS ni de voix off : la voix des clips est celle de la vidéo source.
+- Pas de stock footage, pas d'images IA, pas de musique ajoutée.
+
+Le LLM sert **uniquement à sélectionner** les segments les plus forts en lisant le transcript réel. Il renvoie des timestamps, jamais du texte inventé.
+
+## Pipeline
+
+1. **download** : `yt-dlp` récupère la vidéo source (mp4, cache local).
+2. **transcribe** : `faster-whisper` produit un transcript avec timestamps mot à mot (brique non négociable).
+3. **segment** : le transcript est envoyé à un LLM qui renvoie les N meilleurs segments (sélection pure). Fallback heuristique si le LLM est injoignable.
+4. **cut + render** : `ffmpeg` extrait chaque plage.
+5. **reframe** : conversion 16:9 vers 9:16 centrée sur le visage dominant (MediaPipe), par scène (PySceneDetect), avec repli crop centré.
+6. **captions** : génération d'un fichier ASS karaoké (mot surligné au moment où il est prononcé).
+7. **render** : `ffmpeg` applique crop + sous-titres, encode en 1080x1920 via `h264_videotoolbox`, sort un mp4 par clip plus un `meta.json`, et un `output/index.json` récapitulatif.
+
+## Prérequis
+
+- **macOS Apple Silicon** (testé sur M4, macOS 26).
+- **Python 3.12** (ne pas utiliser 3.13, certaines dépendances ML ne suivent pas).
+- **uv** pour la gestion d'environnement : `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **ffmpeg** avec `h264_videotoolbox` : `brew install ffmpeg` (vérifier avec `ffmpeg -encoders | grep videotoolbox`).
+- **Un serveur LLM local optionnel** exposant une API compatible OpenAI. Par défaut `llama-server` (llama.cpp) servant Qwen3 sur `http://localhost:8080/v1`.
+
+Exemple de lancement du serveur LLM (à adapter au chemin de ton modèle) :
+
+```bash
+llama-server -m ./qwen3-8b-instruct.gguf --port 8080 --ctx-size 8192
+```
+
+Si aucun serveur LLM n'est joignable, le pipeline bascule automatiquement sur une **sélection heuristique** et reste pleinement fonctionnel hors-ligne (la sélection est simplement moins fine).
+
+## Installation
+
+```bash
+git clone <repo> clipper && cd clipper
+uv sync
+cp .env.example .env   # puis ajuster si besoin
+```
+
+`uv sync` crée l'environnement et installe les dépendances épinglées.
+
+## Utilisation
+
+```bash
+uv run clipper "https://www.youtube.com/watch?v=XXXXXXXXXXX"
+```
+
+Options :
+
+```bash
+uv run clipper <url> \
+  --clips 8 \                # nombre de clips (défaut 8)
+  --lang fr \                # langue de transcription (défaut fr)
+  --whisper-model small \    # tiny | base | small | medium | large-v3
+  --provider local_llm \     # local_llm (défaut) ou anthropic (stub)
+  --output output \
+  -v                         # logs détaillés
+```
+
+### Résultat
+
+```
+output/
+  index.json            # récapitulatif (source, langue, liste des clips)
+  clip_00/
+    clip.mp4            # 1080x1920, sous-titres incrustés
+    subs.ass            # sous-titres karaoké générés
+    meta.json           # titre, score, url source, start/end, résolution
+  clip_01/
+  ...
+```
+
+Tout est configurable par variables d'environnement (voir `.env.example`).
+
+## Configuration
+
+Les réglages se font dans `.env` (voir `.env.example` pour la liste complète) :
+
+- **LLM** : `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`, `LLM_PROVIDER`.
+- **Transcription** : `WHISPER_MODEL`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, `LANG_CODE`.
+- **Sélection** : `CLIPS`, `MIN_DURATION`, `MAX_DURATION`.
+- **Recadrage** : `PER_SCENE_REFRAME`, `SCENE_THRESHOLD`, `FACE_CONFIDENCE`, `SAMPLES_PER_SCENE`.
+- **Rendu** : `FPS`, `VIDEO_ENCODER`, `VIDEO_BITRATE`.
+
+## Tests
+
+```bash
+uv run pytest -q
+```
+
+Couvre le parsing robuste de la réponse LLM, l'alignement des segments sur les frontières de phrase, le calcul du crop 9:16 et la génération ASS.
+
+## Détection de visage
+
+Le recadrage utilise **MediaPipe Tasks** (`FaceDetector`, modèle `blaze_face_short_range.tflite` téléchargé une fois dans `cache/models/`). Si le modèle n'est pas téléchargeable (hors-ligne au premier lancement), l'outil bascule automatiquement sur le détecteur **Haar d'OpenCV**, livré avec la dépendance, donc 100 % hors-ligne.
+
+## Optimisation de vitesse (M4)
+
+- **Encodage** : déjà accéléré matériellement via `h264_videotoolbox`.
+- **Transcription** : `faster-whisper` tourne sur CPU (CTranslate2, pas de CUDA). Pour aller plus vite sur Apple Silicon, le chemin d'optimisation est **`whisper.cpp` compilé avec le backend Metal**, qui exploite le GPU intégré. Ce n'est pas implémenté au MVP : la marche à suivre serait de remplacer l'appel `faster-whisper` dans `transcribe.py` par un appel au binaire `whisper-cli` de whisper.cpp (avec `--output-json` pour récupérer les timestamps mot à mot), en gardant la même structure `Transcript`.
+- **Fonctionnement hors-ligne** : une fois les modèles Whisper et le modèle de détection de visage téléchargés, tout tourne hors-ligne (sauf l'étape `download` yt-dlp, qui nécessite le réseau).
+
+## Phase 2 (non implémentée, stubs avec TODO)
+
+- **Active speaker tracking** dans `reframe.py` : croiser l'activité audio et la position du visage, avec un pan panoramique fluide entre les frames au lieu d'un crop fixe par scène.
+- **Provider `anthropic.py`** : appel à l'API Messages d'Anthropic (squelette présent).
+- **API FastAPI** : exposer `POST /process {url}` et `GET /clips`.
+- **Front Next.js** : interface web pour lancer un traitement, suivre la progression et prévisualiser les clips, consommant l'API FastAPI ci-dessus.
+
+## Architecture du code
+
+```
+src/clipper/
+  cli.py            # point d'entrée : clipper <url>
+  config.py         # lecture .env, valeurs par défaut
+  pipeline.py       # orchestration des étapes
+  download.py       # yt-dlp
+  transcribe.py     # faster-whisper, timestamps mot à mot
+  segment.py        # sélection LLM (pluggable) + fallback heuristique
+  reframe.py        # mediapipe + scenedetect -> crop 9:16
+  captions.py       # génération ASS karaoké
+  render.py         # ffmpeg cut + crop + burn + encode
+  providers/
+    base.py         # interface LLMProvider
+    local_llm.py    # endpoint OpenAI-compatible (défaut)
+    anthropic.py    # stub, phase 2
+```
