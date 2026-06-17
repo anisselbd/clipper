@@ -8,6 +8,7 @@ sont clip-locaux (l'amorce d'entree remet les PTS a ~0).
 
 from __future__ import annotations
 
+import functools
 import logging
 import subprocess
 from pathlib import Path
@@ -15,6 +16,36 @@ from pathlib import Path
 from .reframe import ReframePlan
 
 logger = logging.getLogger("clipper.render")
+
+
+@functools.lru_cache(maxsize=1)
+def subtitles_backend() -> str:
+    """Detecte si ffmpeg embarque libass ('libass') sinon overlay Pillow ('overlay')."""
+    try:
+        out = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True
+        ).stdout
+    except Exception:
+        return "overlay"
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] in ("ass", "subtitles"):
+            return "libass"
+    return "overlay"
+
+
+def _encode_args(encoder: str, bitrate: str, fps: int) -> list[str]:
+    return [
+        "-r", str(fps),
+        "-c:v", encoder,
+        "-b:v", bitrate,
+        "-allow_sw", "1",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "160k",
+        "-ar", "48000",
+        "-movflags", "+faststart",
+    ]
 
 
 def _step_expr(triples: list[tuple[float, float, int]]) -> str:
@@ -90,20 +121,69 @@ def render_clip(
         "-i", str(source.resolve()),
         "-t", f"{duration:.3f}",
         "-vf", filtergraph,
-        "-r", str(fps),
-        "-c:v", encoder,
-        "-b:v", bitrate,
-        "-allow_sw", "1",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac",
-        "-b:a", "160k",
-        "-ar", "48000",
-        "-movflags", "+faststart",
+        *_encode_args(encoder, bitrate, fps),
         out_path.name,
     ]
 
-    logger.info("Rendu : %s (%.1fs)", out_path.name, duration)
+    logger.info("Rendu (libass) : %s (%.1fs)", out_path.name, duration)
     proc = subprocess.run(cmd, cwd=str(workdir), capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg a echoue pour {out_path.name}:\n{proc.stderr[-2500:]}"
+        )
+    if not out_path.exists() or out_path.stat().st_size == 0:
+        raise RuntimeError(f"Sortie vide pour {out_path}")
+    return out_path
+
+
+def render_clip_overlay(
+    source: Path,
+    start: float,
+    end: float,
+    plan: ReframePlan,
+    concat_list: Path | None,
+    out_path: Path,
+    *,
+    target_w: int = 1080,
+    target_h: int = 1920,
+    fps: int = 30,
+    encoder: str = "h264_videotoolbox",
+    bitrate: str = "8M",
+) -> Path:
+    """Rendu sans libass : crop + scale + incrustation des sous-titres via overlay PNG."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    duration = max(0.1, end - start)
+    crop = build_crop_filter(plan)
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", f"{start:.3f}",
+        "-t", f"{duration:.3f}",
+        "-i", str(source.resolve()),
+    ]
+    if concat_list is not None:
+        cmd += ["-f", "concat", "-safe", "0", "-i", str(concat_list.resolve())]
+        filter_complex = (
+            f"[0:v]{crop},scale={target_w}:{target_h}:flags=lanczos,setsar=1[base];"
+            f"[1:v]format=rgba,scale={target_w}:{target_h}[ov];"
+            f"[base][ov]overlay=0:0:shortest=1,format=yuv420p[v]"
+        )
+    else:
+        filter_complex = (
+            f"[0:v]{crop},scale={target_w}:{target_h}:flags=lanczos,setsar=1,"
+            f"format=yuv420p[v]"
+        )
+
+    cmd += [
+        "-filter_complex", filter_complex,
+        "-map", "[v]",
+        "-map", "0:a?",
+        *_encode_args(encoder, bitrate, fps),
+        str(out_path.resolve()),
+    ]
+
+    logger.info("Rendu (overlay) : %s (%.1fs)", out_path.name, duration)
+    proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         raise RuntimeError(
             f"ffmpeg a echoue pour {out_path.name}:\n{proc.stderr[-2500:]}"

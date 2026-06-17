@@ -8,14 +8,15 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .captions import generate_ass_for_clip
+from .captions import generate_ass_for_clip, render_overlay_assets
 from .config import Config
 from .download import download
 from .reframe import FaceDetector, compute_reframe
-from .render import probe_resolution, render_clip
+from .render import probe_resolution, render_clip, render_clip_overlay, subtitles_backend
 from .segment import select_segments
 from .transcribe import transcribe
 
@@ -52,6 +53,12 @@ def run(url: str, config: Config) -> dict:
     detector = FaceDetector(config.models_dir, min_confidence=config.face_confidence)
     words = transcript.all_words()
 
+    backend = subtitles_backend()
+    if backend == "libass":
+        logger.info("Sous-titres : ffmpeg libass detecte (incrustation ASS native).")
+    else:
+        logger.info("Sous-titres : ffmpeg sans libass, bascule sur overlay PNG (Pillow).")
+
     clips_meta: list[dict] = []
     for i, seg in enumerate(selected):
         clip_id = f"clip_{i:02d}"
@@ -72,28 +79,34 @@ def run(url: str, config: Config) -> dict:
                 per_scene=config.per_scene_reframe,
             )
 
-            # 6. Sous-titres ASS
+            # 6. Sous-titres : on ecrit toujours l'ASS (artefact portable).
             ass_content = generate_ass_for_clip(
                 words, seg.start, seg.end, width=config.target_w, height=config.target_h
             )
             ass_path = clip_dir / "subs.ass"
             ass_path.write_text(ass_content, encoding="utf-8")
 
-            # 7. Rendu
+            # 7. Rendu (chemin selon les capacites de ffmpeg)
             out_path = clip_dir / "clip.mp4"
-            render_clip(
-                src.path,
-                seg.start,
-                seg.end,
-                plan,
-                ass_path,
-                out_path,
-                target_w=config.target_w,
-                target_h=config.target_h,
-                fps=config.fps,
-                encoder=config.video_encoder,
-                bitrate=config.video_bitrate,
-            )
+            if backend == "libass":
+                render_clip(
+                    src.path, seg.start, seg.end, plan, ass_path, out_path,
+                    target_w=config.target_w, target_h=config.target_h,
+                    fps=config.fps, encoder=config.video_encoder, bitrate=config.video_bitrate,
+                )
+            else:
+                concat = render_overlay_assets(
+                    words, seg.start, seg.end, clip_dir / "_subs",
+                    width=config.target_w, height=config.target_h,
+                    font_path=config.caption_font, font_size=config.caption_font_size,
+                )
+                render_clip_overlay(
+                    src.path, seg.start, seg.end, plan, concat, out_path,
+                    target_w=config.target_w, target_h=config.target_h,
+                    fps=config.fps, encoder=config.video_encoder, bitrate=config.video_bitrate,
+                )
+                # Nettoie les PNG intermediaires une fois le clip rendu.
+                shutil.rmtree(clip_dir / "_subs", ignore_errors=True)
 
             res = probe_resolution(out_path)
             meta = {

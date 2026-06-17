@@ -11,6 +11,7 @@ dependencies = [
     "faster-whisper>=1.2.1",
     "httpx>=0.28.1",
     "mediapipe>=0.10.35",
+    "pillow>=12.2.0",
     "python-dotenv>=1.2.2",
     "scenedetect>=0.7",
     "yt-dlp>=2026.6.9",

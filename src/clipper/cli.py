@@ -53,8 +53,8 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
         datefmt="%H:%M:%S",
     )
-    # Bride le bruit des dependances tierces.
-    for noisy in ("urllib3", "httpx", "httpcore"):
+    # Bride le bruit des dependances tierces (meme en mode -v).
+    for noisy in ("urllib3", "httpx", "httpcore", "filelock", "huggingface_hub", "fsspec"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     config = _make_config(args)

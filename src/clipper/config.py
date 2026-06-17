@@ -59,6 +59,10 @@ class Config:
     video_encoder: str = field(default_factory=lambda: os.getenv("VIDEO_ENCODER", "h264_videotoolbox"))
     video_bitrate: str = field(default_factory=lambda: os.getenv("VIDEO_BITRATE", "8M"))
 
+    # --- Sous-titres ---
+    caption_font: str | None = field(default_factory=lambda: os.getenv("FONT_PATH") or None)
+    caption_font_size: int = field(default_factory=lambda: int(os.getenv("CAPTION_FONT_SIZE", "76")))
+
     # --- Chemins ---
     output_dir: Path = field(default_factory=lambda: Path(os.getenv("OUTPUT_DIR", "output")))
     cache_dir: Path = field(default_factory=lambda: Path(os.getenv("CACHE_DIR", "cache")))
