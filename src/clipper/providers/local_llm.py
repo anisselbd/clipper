@@ -21,11 +21,15 @@ class LocalLLMProvider(LLMProvider):
         model: str,
         api_key: str | None = None,
         timeout: float = 180.0,
+        extra_body: dict | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
         self.timeout = timeout
+        # Parametres supplementaires fusionnes dans le corps (ex.
+        # chat_template_kwargs pour desactiver le thinking de Qwen3).
+        self.extra_body = extra_body or {}
 
     def complete(
         self,
@@ -48,6 +52,7 @@ class LocalLLMProvider(LLMProvider):
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
+            **self.extra_body,
         }
         try:
             resp = httpx.post(url, json=payload, headers=headers, timeout=self.timeout)

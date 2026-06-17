@@ -34,6 +34,9 @@ class Config:
     llm_model: str = field(default_factory=lambda: os.getenv("LLM_MODEL", "qwen3"))
     llm_api_key: str | None = field(default_factory=lambda: os.getenv("LLM_API_KEY") or None)
     llm_timeout: float = field(default_factory=lambda: float(os.getenv("LLM_TIMEOUT", "180")))
+    # Desactive le mode "thinking" (Qwen3 et co.) : selection plus rapide, JSON
+    # direct. Sans effet sur les modeles dont le template l'ignore.
+    llm_disable_thinking: bool = field(default_factory=lambda: _env_bool("LLM_DISABLE_THINKING", True))
 
     # --- Transcription (faster-whisper) ---
     whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "small"))
