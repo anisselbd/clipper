@@ -33,8 +33,10 @@ Le LLM sert **uniquement à sélectionner** les segments les plus forts en lisan
 Exemple de lancement du serveur LLM (à adapter au chemin de ton modèle) :
 
 ```bash
-llama-server -m ./qwen3-8b-instruct.gguf --port 8080 --ctx-size 8192
+llama-server -m ./qwen3.gguf --host 127.0.0.1 --port 8080 -c 8192 -ngl 99 --jinja
 ```
+
+L'option `--jinja` est nécessaire pour les modèles Qwen3 (template de chat). Le mode raisonnement (thinking) est **désactivé automatiquement** par le pipeline (`chat_template_kwargs.enable_thinking=false`) pour obtenir un JSON direct et rapide ; sans cela, Qwen3 consomme tout son budget de tokens à raisonner et ne renvoie rien d'exploitable. La sélection se fait à température 0 avec réessais (`LLM_RETRIES`) pour la fiabilité du format.
 
 Si aucun serveur LLM n'est joignable, le pipeline bascule automatiquement sur une **sélection heuristique** et reste pleinement fonctionnel hors-ligne (la sélection est simplement moins fine).
 
