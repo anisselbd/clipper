@@ -5,8 +5,9 @@ le contenu, chaque scene choisit sa strategie :
 
 - "face"   : talking-head, interview, vlog -> suit le visage dominant (MediaPipe
              Tasks, fallback OpenCV Haar).
-- "motion" : sport, action, gameplay -> suit le centroide du mouvement (diff de
-             frames). Pas de visage a suivre, on suit l'action.
+- "motion" : sport, action, gameplay -> suit l'action via flot optique avec
+             compensation du panoramique camera (on retire le balayage et on
+             vise le mouvement residuel des joueurs/ballon). Pan rapide.
 - "center" : repli (rien d'exploitable).
 
 Le mode est "auto" par defaut (decision par scene) ou force (face/motion/center).
@@ -274,9 +275,13 @@ def _face_samples(cap, detector: FaceDetector, times: list[float]):
 
 
 def _motion_samples(cap, times: list[float], src_w: int, src_h: int) -> list[tuple[float, float] | None]:
-    """Centroide du mouvement (diff de frames) par instant, ou None si statique."""
+    """Centroide du mouvement (diff de frames) par instant, ou None si statique.
+
+    Repli simple (utilise si le flot optique echoue). Ne distingue PAS le
+    mouvement de la camera de celui des joueurs : se rabat au centre des qu'un
+    panoramique fait tout bouger.
+    """
     import cv2
-    import numpy as np
 
     scale = 320.0 / src_w
     out: list[tuple[float, float] | None] = []
@@ -302,6 +307,65 @@ def _motion_samples(cap, times: list[float], src_w: int, src_h: int) -> list[tup
         if coverage > 0.45:
             cx = 0.5 * cx + 0.5 * (src_w / 2.0)
             cy = 0.5 * cy + 0.5 * (src_h / 2.0)
+        out.append((cx, cy))
+    return out
+
+
+def _action_samples(cap, times: list[float], src_w: int, src_h: int) -> list[tuple[float, float] | None]:
+    """Centre de l'ACTION par instant, robuste au panoramique camera (sport).
+
+    Flot optique dense (Farneback) entre deux frames consecutives. On estime le
+    mouvement GLOBAL de la camera (mediane du flot, robuste car les joueurs sont
+    minoritaires en pixels) et on le retire : le mouvement RESIDUEL est celui des
+    joueurs et du ballon, independamment du balayage. On vise le centroide de ce
+    residu, pondere par sa magnitude et limite aux pixels qui bougent le plus
+    (le ballon/le tireur dominent). La ou la diff de frames se rabattait au
+    centre des que la camera bougeait, on garde le ballon dans le cadre.
+
+    Repli sur _motion_samples si le flot optique n'est pas disponible.
+    """
+    try:
+        import cv2
+        import numpy as np
+    except Exception:
+        return _motion_samples(cap, times, src_w, src_h)
+
+    scale = 320.0 / src_w
+    out: list[tuple[float, float] | None] = []
+    grid = None
+    for t in times:
+        cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000.0)
+        ok1, f1 = cap.read()
+        ok2, f2 = cap.read()
+        if not (ok1 and ok2) or f1 is None or f2 is None:
+            out.append(None)
+            continue
+        g1 = cv2.cvtColor(cv2.resize(f1, (0, 0), fx=scale, fy=scale), cv2.COLOR_BGR2GRAY)
+        g2 = cv2.cvtColor(cv2.resize(f2, (0, 0), fx=scale, fy=scale), cv2.COLOR_BGR2GRAY)
+        try:
+            flow = cv2.calcOpticalFlowFarneback(g1, g2, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        except Exception:
+            out.append(None)
+            continue
+        fx, fy = flow[..., 0], flow[..., 1]
+        # Mouvement global de la camera = mediane (panoramique/translation).
+        cam_x, cam_y = float(np.median(fx)), float(np.median(fy))
+        rx, ry = fx - cam_x, fy - cam_y
+        mag = np.sqrt(rx * rx + ry * ry)
+        # Ne garder que le mouvement local franc (joueurs/ballon), pas le bruit
+        # ni le residu diffus du public. Seuil = haut percentile, avec plancher.
+        thr = max(float(np.percentile(mag, 92)), 0.6)
+        weight = np.where(mag >= thr, mag, 0.0)
+        total = float(weight.sum())
+        if total < 1e-3:
+            out.append(None)  # rien de franc -> rappel au centre en aval
+            continue
+        if grid is None or grid[0].shape != mag.shape:
+            h, w = mag.shape
+            grid = np.mgrid[0:h, 0:w]
+        ys, xs = grid
+        cx = float((weight * xs).sum() / total) / scale
+        cy = float((weight * ys).sum() / total) / scale
         out.append((cx, cy))
     return out
 
@@ -379,8 +443,6 @@ def compute_reframe(
     cap = cv2.VideoCapture(str(video_path))
     keys: list[CropKey] = []
     strategies: list[str] = []
-    # Vitesse de pan max ~ 9% de la largeur source par seconde -> en px/echantillon.
-    max_step = 0.09 * src_size * dt
 
     for si, (s, e) in enumerate(scenes):
         times = _sample_times(s, e, dt)
@@ -394,7 +456,7 @@ def compute_reframe(
         if strat == "face":
             centers = faces
         elif strat == "motion":
-            centers = _motion_samples(cap, times, src_w, src_h)
+            centers = _action_samples(cap, times, src_w, src_h)
         else:
             centers = [None] * len(times)
         strategies.append(strat)
@@ -406,7 +468,14 @@ def compute_reframe(
             # plan (visage large) -> suivi precis ; petit visage -> proche centre.
             pull = max(0.0, min(1.0, (face_size - 0.05) / 0.10))
             coords = [pull * c + (1.0 - pull) * center_default for c in coords]
-        coords = smooth_series(coords, win=5, max_step=max_step)
+        # Sport (motion) : l'action traverse vite -> pan plus rapide et moins
+        # lisse pour rester sur le ballon. Talking-head : pan lent et tres doux.
+        if strat == "motion":
+            sm_win, step_frac = 3, 0.22
+        else:
+            sm_win, step_frac = 5, 0.09
+        max_step = step_frac * src_size * dt
+        coords = smooth_series(coords, win=sm_win, max_step=max_step)
         origins = [clamp_origin(c, crop_size, src_size) for c in coords]
 
         # Reduction en cles (sous-echantillonnage borne, division plafond).
