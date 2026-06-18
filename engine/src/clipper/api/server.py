@@ -63,9 +63,46 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
+def _start_parent_watchdog() -> None:
+    """Auto-termine le moteur si le process parent (l'app desktop) disparait.
+
+    Robuste a tous les modes de fermeture (fenetre, Cmd+Q, crash, kill), la ou
+    les signaux peuvent manquer. Active uniquement si CLIPPER_PARENT_PID est pose
+    (par la coquille Tauri).
+    """
+    import os
+    import threading
+    import time
+
+    raw = os.environ.get("CLIPPER_PARENT_PID")
+    if not raw:
+        return
+    try:
+        ppid = int(raw)
+    except ValueError:
+        return
+
+    def watch() -> None:
+        while True:
+            try:
+                os.kill(ppid, 0)  # parent vivant
+            except ProcessLookupError:
+                logging.getLogger("clipper.api").info("App parente fermee, arret du moteur.")
+                os._exit(0)
+            except PermissionError:
+                pass  # vivant mais autre utilisateur (rare)
+            except OSError:
+                os._exit(0)
+            time.sleep(1.5)
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
 def main() -> None:
     """Point d'entree console : lance uvicorn."""
     import uvicorn
+
+    _start_parent_watchdog()
 
     logging.basicConfig(
         level=logging.INFO,

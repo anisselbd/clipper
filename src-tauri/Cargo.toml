@@ -1,19 +1,25 @@
-# SCAFFOLD PHASE 2. Completer avec `cargo tauri init` au besoin.
 [package]
-name = "clipper"
+name = "app"
 version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+license = ""
+repository = ""
 edition = "2021"
-description = "clipper desktop (Tauri v2 + moteur FastAPI en sidecar)"
+rust-version = "1.77.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.6.2" }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-shell = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-
-[[bin]]
-name = "clipper"
-path = "src/main.rs"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.2" }
+tauri-plugin-log = "2"

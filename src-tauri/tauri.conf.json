@@ -4,7 +4,6 @@
   "version": "0.1.0",
   "identifier": "co.anisse.clipper",
   "build": {
-    "//": "En dev, Tauri charge le front next dev. En build, l'export statique app/out.",
     "frontendDist": "../app/out",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "npm --prefix ../app run dev",
@@ -17,16 +16,27 @@
         "width": 1180,
         "height": 860,
         "minWidth": 880,
-        "minHeight": 640
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false
       }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": "app",
-    "//externalBin": "Sidecar PyInstaller du moteur FastAPI. Tauri cherche le binaire suffixe par le target triple, ex: binaries/clipper-engine-aarch64-apple-darwin",
-    "externalBin": ["binaries/clipper-engine"],
-    "icon": ["icons/icon.icns"]
+    "targets": ["app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
   }
 }
