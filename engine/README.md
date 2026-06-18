@@ -124,9 +124,17 @@ Le pipeline détecte le backend disponible au lancement (ligne de log « Sous-ti
 
 La police des sous-titres est configurable via `FONT_PATH` et `CAPTION_FONT_SIZE` (défaut : Arial Bold, taille 76).
 
-## Détection de visage
+## Recadrage conscient du contenu
 
-Le recadrage utilise **MediaPipe Tasks** (`FaceDetector`, modèle `blaze_face_short_range.tflite` téléchargé une fois dans `cache/models/`). Si le modèle n'est pas téléchargeable (hors-ligne au premier lancement), l'outil bascule automatiquement sur le détecteur **Haar d'OpenCV**, livré avec la dépendance, donc 100 % hors-ligne.
+Le recadrage 9:16 n'est pas seulement centré visage (cas conférence). Chaque scène choisit sa stratégie (mode `auto` par défaut, ou forcé via `REFRAME_MODE` / `--reframe` / le sélecteur de l'UI) :
+
+- **`face`** : talking-head, interview, vlog. Suit le visage dominant via **MediaPipe Tasks** (`blaze_face_short_range.tflite` téléchargé une fois dans `cache/models/`, fallback **OpenCV Haar** hors-ligne). Rappel vers le centre quand le visage est petit, gardes contre les foules (nombre de visages) et les spectateurs de premier rang (position basse).
+- **`motion`** : sport, action, gameplay. Suit le **centroïde du mouvement** (différence de frames), pas un visage. C'est ce que choisit l'auto sur une vidéo de foot : le recadrage suit l'action.
+- **`center`** : repli neutre.
+
+Le recadrage est **lissé dans le temps** (pan fluide) : échantillonnage dense, moyenne glissante et bornage de la vitesse, interpolation linéaire au sein d'une scène et palier (saut) aux coupures.
+
+Limite connue (phase 2, active speaker tracking audio) : un plan large où l'orateur est petit et sur le côté avec un spectateur proche de la caméra peut cadrer le spectateur. Forcer `--reframe center` ou `motion` contourne le cas.
 
 ## Optimisation de vitesse (M4)
 
