@@ -48,39 +48,47 @@ def _encode_args(encoder: str, bitrate: str, fps: int) -> list[str]:
     ]
 
 
-def _step_expr(triples: list[tuple[float, float, int]]) -> str:
-    """Construit une expression ffmpeg en escalier : valeur par plage temporelle.
+def _path_expr(keys, axis: str) -> str:
+    """Expression ffmpeg du chemin de recadrage : interpolation lineaire (pan
+    fluide) au sein d'une scene, palier (saut) aux coupures de scene.
 
-    triples = [(t0, t1, valeur), ...] (clip-locaux). Les virgules internes sont
-    echappees (\\,) pour ne pas etre prises pour des separateurs de filtre.
+    Les virgules internes sont echappees (\\,) pour ne pas etre prises pour des
+    separateurs de filtre. Les parentheses et operateurs arithmetiques sont
+    litteraux dans un filtergraph.
     """
-    expr = str(triples[-1][2])
-    for t0, t1, val in reversed(triples[:-1]):
-        expr = f"if(between(t\\,{t0:.3f}\\,{t1:.3f})\\,{val}\\,{expr})"
+    def val(k):
+        return int(round(k.x if axis == "x" else k.y))
+
+    pts = [(k.t, val(k), k.scene) for k in keys]
+    expr = str(pts[-1][1])
+    for i in range(len(pts) - 2, -1, -1):
+        t0, v0, sc0 = pts[i]
+        t1, v1, sc1 = pts[i + 1]
+        if sc0 != sc1 or (t1 - t0) < 0.05:
+            seg = str(v0)  # coupe ou segment quasi nul -> palier
+        else:
+            seg = f"({v0}+({v1 - v0})*(t-{t0:.3f})/{t1 - t0:.3f})"
+        expr = f"if(lt(t\\,{t1:.3f})\\,{seg}\\,{expr})"
     return expr
 
 
 def build_crop_filter(plan: ReframePlan) -> str:
-    """Genere le filtre crop (constant si une scene, sinon expression temporelle)."""
+    """Genere le filtre crop (constant si fixe, sinon chemin interpole)."""
     w, h = plan.crop_w, plan.crop_h
-    scenes = plan.scenes or []
-    if not scenes:
+    keys = plan.keys or []
+    if not keys:
         return f"crop={w}:{h}:0:0"
 
     if plan.axis == "x":
-        values = [sc.x for sc in scenes]
-        const_y = scenes[0].y
-        if len(scenes) == 1 or len(set(values)) == 1:
-            return f"crop={w}:{h}:{values[0]}:{const_y}"
-        expr = _step_expr([(sc.t0, sc.t1, sc.x) for sc in scenes])
-        return f"crop={w}:{h}:{expr}:{const_y}"
+        const_y = keys[0].y
+        if len(keys) == 1 or len({k.x for k in keys}) == 1:
+            return f"crop={w}:{h}:{keys[0].x}:{const_y}"
+        return f"crop={w}:{h}:{_path_expr(keys, 'x')}:{const_y}"
     else:
-        values = [sc.y for sc in scenes]
-        const_x = scenes[0].x
-        if len(scenes) == 1 or len(set(values)) == 1:
-            return f"crop={w}:{h}:{const_x}:{values[0]}"
-        expr = _step_expr([(sc.t0, sc.t1, sc.y) for sc in scenes])
-        return f"crop={w}:{h}:{const_x}:{expr}"
+        const_x = keys[0].x
+        if len(keys) == 1 or len({k.y for k in keys}) == 1:
+            return f"crop={w}:{h}:{const_x}:{keys[0].y}"
+        return f"crop={w}:{h}:{const_x}:{_path_expr(keys, 'y')}"
 
 
 def build_filtergraph(plan: ReframePlan, ass_name: str, target_w: int, target_h: int) -> str:

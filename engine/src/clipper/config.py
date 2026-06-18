@@ -55,6 +55,8 @@ class Config:
     max_duration: float = field(default_factory=lambda: float(os.getenv("MAX_DURATION", "60")))
 
     # --- Recadrage ---
+    # auto (decision par scene), face, motion, center.
+    reframe_mode: str = field(default_factory=lambda: os.getenv("REFRAME_MODE", "auto"))
     per_scene_reframe: bool = field(default_factory=lambda: _env_bool("PER_SCENE_REFRAME", True))
     scene_threshold: float = field(default_factory=lambda: float(os.getenv("SCENE_THRESHOLD", "27")))
     face_confidence: float = field(default_factory=lambda: float(os.getenv("FACE_CONFIDENCE", "0.5")))

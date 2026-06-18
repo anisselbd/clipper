@@ -46,6 +46,7 @@ export type CreateJobInput = {
   num_clips?: number;
   lang?: string;
   whisper_model?: string;
+  reframe_mode?: string;
 };
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {

@@ -121,6 +121,7 @@ def run(
                 scene_threshold=config.scene_threshold,
                 samples_per_scene=config.samples_per_scene,
                 per_scene=config.per_scene_reframe,
+                mode=config.reframe_mode,
             )
 
             # 6. Sous-titres : ASS toujours ecrit (artefact portable) + overlay si besoin.
@@ -168,7 +169,8 @@ def run(
                 "duration": round(seg.end - seg.start, 2),
                 "width": res[0] if res else None,
                 "height": res[1] if res else None,
-                "scenes": len(plan.scenes),
+                "scenes": plan.n_scenes,
+                "reframe_strategy": plan.strategy,
                 "file": str(out_path.relative_to(config.output_dir)),
                 "thumb": str(thumb_path.relative_to(config.output_dir)) if has_thumb else None,
             }

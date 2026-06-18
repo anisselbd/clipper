@@ -10,6 +10,7 @@ class CreateJobRequest(BaseModel):
     num_clips: int | None = None
     lang: str | None = None
     whisper_model: str | None = None
+    reframe_mode: str | None = None  # auto | face | motion | center
 
 
 class JobResponse(BaseModel):

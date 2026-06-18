@@ -4,6 +4,12 @@ import { useState } from "react";
 import type { CreateJobInput, Preflight } from "@/lib/api";
 
 const WHISPER_MODELS = ["tiny", "base", "small", "medium", "large-v3"];
+const REFRAMES = [
+  { v: "auto", label: "Auto (par scene)" },
+  { v: "face", label: "Visage (talking-head)" },
+  { v: "motion", label: "Mouvement (sport/action)" },
+  { v: "center", label: "Centre" },
+];
 const LANGS = [
   { code: "fr", label: "Francais" },
   { code: "en", label: "Anglais" },
@@ -24,11 +30,12 @@ export default function JobForm({
   const [numClips, setNumClips] = useState(5);
   const [lang, setLang] = useState("fr");
   const [whisper, setWhisper] = useState("small");
+  const [reframe, setReframe] = useState("auto");
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) return;
-    onSubmit({ url: url.trim(), num_clips: numClips, lang, whisper_model: whisper });
+    onSubmit({ url: url.trim(), num_clips: numClips, lang, whisper_model: whisper, reframe_mode: reframe });
   };
 
   return (
@@ -45,7 +52,7 @@ export default function JobForm({
         disabled={disabled}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div>
           <label htmlFor="numClips" className="block text-xs text-[var(--muted)] mb-1.5">
             Nombre de clips
@@ -93,6 +100,24 @@ export default function JobForm({
             {WHISPER_MODELS.map((m) => (
               <option key={m} value={m}>
                 {m}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="reframe" className="block text-xs text-[var(--muted)] mb-1.5">
+            Recadrage
+          </label>
+          <select
+            id="reframe"
+            className="field w-full rounded-xl px-3 py-2.5 text-sm"
+            value={reframe}
+            onChange={(e) => setReframe(e.target.value)}
+            disabled={disabled}
+          >
+            {REFRAMES.map((r) => (
+              <option key={r.v} value={r.v}>
+                {r.label}
               </option>
             ))}
           </select>

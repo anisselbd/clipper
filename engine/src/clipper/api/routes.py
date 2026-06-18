@@ -59,7 +59,12 @@ def create_job(req: CreateJobRequest, request: Request):
     if not req.url.strip():
         raise HTTPException(status_code=422, detail="url manquante")
     job_id = uuid.uuid4().hex[:12]
-    params = {"num_clips": req.num_clips, "lang": req.lang, "whisper_model": req.whisper_model}
+    params = {
+        "num_clips": req.num_clips,
+        "lang": req.lang,
+        "whisper_model": req.whisper_model,
+        "reframe_mode": req.reframe_mode,
+    }
     job = providers.jobstore.create_job(job_id, req.url.strip(), params)
     worker.submit(job_id, req.url.strip(), params)
     return _job_dict(providers.jobstore, job)

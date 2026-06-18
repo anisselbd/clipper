@@ -41,6 +41,7 @@ class JobWorker:
             clips=params.get("num_clips") or self.config.clips,
             lang=params.get("lang") or self.config.lang,
             whisper_model=params.get("whisper_model") or self.config.whisper_model,
+            reframe_mode=params.get("reframe_mode") or self.config.reframe_mode,
             output_dir=self.config.data_dir / "jobs" / job_id / "output",
         )
 

@@ -24,6 +24,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Modele faster-whisper : tiny/base/small/medium/large-v3 (defaut small).",
     )
     p.add_argument("--provider", default=None, help="Fournisseur LLM : local_llm (defaut) ou anthropic.")
+    p.add_argument(
+        "--reframe",
+        default=None,
+        choices=["auto", "face", "motion", "center"],
+        help="Strategie de recadrage : auto (par scene), face, motion (sport/action), center.",
+    )
     p.add_argument("--output", default=None, help="Repertoire de sortie (defaut output/).")
     p.add_argument("-v", "--verbose", action="store_true", help="Logs detailles (DEBUG).")
     return p
@@ -39,6 +45,8 @@ def _make_config(args: argparse.Namespace) -> Config:
         config.whisper_model = args.whisper_model
     if args.provider is not None:
         config.llm_provider = args.provider
+    if args.reframe is not None:
+        config.reframe_mode = args.reframe
     if args.output is not None:
         from pathlib import Path
 
