@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 clipper = "clipper.cli:main"
+clipper-api = "clipper.api.server:main"
 
 [dependency-groups]
 dev = [
