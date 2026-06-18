@@ -1,17 +1,33 @@
-# Python-generated files
+# ----- Python (engine) -----
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
 *.egg-info
-
-# Virtual environments
-.venv
+.venv/
+.pytest_cache/
 
 # Secrets et config locale
 .env
 
-# Donnees runtime du pipeline
-cache/
-output/
+# Donnees runtime du moteur (cache modeles/videos, sorties, base, data dir)
+engine/cache/
+engine/output/
+engine/data/
+data/
+*.db
+*.sqlite3
+
+# ----- Node / Next.js (app) -----
+node_modules/
+.next/
+out/
+app/.env*.local
+npm-debug.log*
+
+# ----- Tauri (phase 2) -----
+src-tauri/target/
+
+# ----- OS -----
+.DS_Store

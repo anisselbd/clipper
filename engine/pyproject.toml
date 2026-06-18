@@ -8,12 +8,15 @@ authors = [
     { name = "Anisselbd" }
 ]
 dependencies = [
+    "fastapi>=0.137.1",
     "faster-whisper>=1.2.1",
     "httpx>=0.28.1",
     "mediapipe>=0.10.35",
     "pillow>=12.2.0",
     "python-dotenv>=1.2.2",
     "scenedetect>=0.7",
+    "sse-starlette>=3.4.4",
+    "uvicorn[standard]>=0.49.0",
     "yt-dlp>=2026.6.9",
 ]
 
