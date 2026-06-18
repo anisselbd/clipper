@@ -8,6 +8,7 @@ const REFRAMES = [
   { v: "auto", label: "Auto (par scene)" },
   { v: "face", label: "Visage (talking-head)" },
   { v: "motion", label: "Mouvement (sport/action)" },
+  { v: "fullwidth", label: "Largeur complete (bandes floues)" },
   { v: "center", label: "Centre" },
 ];
 const LANGS = [

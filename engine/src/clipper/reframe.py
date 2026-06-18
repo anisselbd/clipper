@@ -10,7 +10,12 @@ le contenu, chaque scene choisit sa strategie :
              vise le mouvement residuel des joueurs/ballon). Pan rapide.
 - "center" : repli (rien d'exploitable).
 
-Le mode est "auto" par defaut (decision par scene) ou force (face/motion/center).
+Mode special "fullwidth" : pas de crop du tout. Le rendu garde TOUTE la largeur
+de la source dans une bande centrale, haut et bas remplis d'un zoom flou (cf.
+render.render_clip_fullwidth). Rien ne sort du cadre horizontalement : pour le
+sport en plan large ou un crop 9:16 ne peut pas contenir le tireur ET le but.
+
+Le mode est "auto" par defaut (decision par scene) ou force (face/motion/center/fullwidth).
 Le recadrage est lisse dans le temps (pan fluide) plutot qu'un crop fige par
 scene : moyenne glissante + bornage de la vitesse + rappel vers le centre.
 
@@ -53,6 +58,7 @@ class ReframePlan:
     keys: list[CropKey] = field(default_factory=list)
     strategy: str = "center"
     n_scenes: int = 1
+    layout: str = "crop"  # "crop" (cadre suiveur) ou "fullwidth" (bandes floues)
 
 
 # --------------------------------------------------------------------------- #
@@ -431,6 +437,18 @@ def compute_reframe(
     import cv2
 
     src_w, src_h = _video_dimensions(video_path)
+
+    # Mode "largeur complete" : pas de crop ni d'analyse. On garde toute la
+    # largeur de la source dans une bande centrale (bandes floues au rendu).
+    # Rien ne sort du cadre horizontalement : ideal pour le sport en plan large.
+    if mode == "fullwidth":
+        logger.info("Reframe %.1f-%.1fs : largeur complete (bandes floues).", clip_start, clip_end)
+        return ReframePlan(
+            src_w=src_w, src_h=src_h, crop_w=src_w, crop_h=src_h, axis="x",
+            keys=[CropKey(t=0.0, x=0, y=0, scene=0)],
+            strategy="fullwidth", n_scenes=1, layout="fullwidth",
+        )
+
     crop_w, crop_h, axis = compute_crop_window(src_w, src_h)
     detector = detector or FaceDetector(models_dir)
     center_default = (src_w / 2.0) if axis == "x" else (src_h / 2.0)

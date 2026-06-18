@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 
 from ...reframe import ReframePlan
-from ...render import render_clip, render_clip_overlay
+from ...render import render_clip, render_clip_fullwidth, render_clip_overlay
 from .base import EncoderProvider
 
 logger = logging.getLogger("clipper.encoder")
@@ -42,6 +42,16 @@ class LocalEncoder(EncoderProvider):
         fps: int = 30,
         bitrate: str = "8M",
     ) -> Path:
+        # Layout "largeur complete" (bandes floues) : pas de crop, on garde
+        # toute la largeur. Choisi quand reframe_mode == "fullwidth".
+        if getattr(plan, "layout", "crop") == "fullwidth":
+            return render_clip_fullwidth(
+                source, start, end, out_path,
+                concat_list=concat_path, ass_path=ass_path,
+                use_libass=(self.subtitle_backend == "libass"),
+                target_w=target_w, target_h=target_h, fps=fps,
+                encoder=self.video_encoder, bitrate=bitrate,
+            )
         if self.subtitle_backend == "libass" and ass_path is not None:
             return render_clip(
                 source, start, end, plan, ass_path, out_path,

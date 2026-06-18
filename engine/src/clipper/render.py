@@ -201,6 +201,87 @@ def render_clip_overlay(
     return out_path
 
 
+def render_clip_fullwidth(
+    source: Path,
+    start: float,
+    end: float,
+    out_path: Path,
+    *,
+    concat_list: Path | None = None,
+    ass_path: Path | None = None,
+    use_libass: bool = False,
+    target_w: int = 1080,
+    target_h: int = 1920,
+    fps: int = 30,
+    encoder: str = "h264_videotoolbox",
+    bitrate: str = "8M",
+    blur_sigma: float = 22.0,
+) -> Path:
+    """Rendu 'largeur complete' : toute la largeur de la source dans une bande
+    centrale, fond rempli par un zoom flou de la meme image, sous-titres en bas.
+
+    Aucun crop horizontal : rien ne sort du cadre (le tireur ET le but restent
+    visibles). Compromis : le terrain occupe une bande centrale plus petite.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    duration = max(0.1, end - start)
+    W, H = target_w, target_h
+
+    # Fond : zoom de la source qui couvre tout le cadre, puis flou + assombri.
+    # Premier plan : source mise a la largeur du cadre (toute la largeur gardee),
+    # centree verticalement par-dessus.
+    base = (
+        f"[0:v]split=2[bg][fg];"
+        f"[bg]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+        f"gblur=sigma={blur_sigma},eq=brightness=-0.12:saturation=1.05[bgb];"
+        f"[fg]scale={W}:-2:flags=lanczos,setsar=1[fgs];"
+        f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2[comp]"
+    )
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-ss", f"{start:.3f}",
+        "-t", f"{duration:.3f}",
+        "-i", str(source.resolve()),
+    ]
+    cwd: str | None = None
+
+    if concat_list is not None and not use_libass:
+        cmd += ["-f", "concat", "-safe", "0", "-i", str(concat_list.resolve())]
+        filter_complex = (
+            base + ";"
+            f"[1:v]format=rgba,scale={W}:{H}[ov];"
+            f"[comp][ov]overlay=0:0:shortest=1,format=yuv420p[v]"
+        )
+        out_arg = str(out_path.resolve())
+    elif use_libass and ass_path is not None:
+        # ass lit le fichier par nom relatif -> cwd = dossier de sortie.
+        filter_complex = base + f";[comp]ass={ass_path.name},format=yuv420p[v]"
+        out_arg = out_path.name
+        cwd = str(out_path.parent)
+    else:
+        filter_complex = base + ";[comp]format=yuv420p[v]"
+        out_arg = str(out_path.resolve())
+
+    cmd += [
+        "-filter_complex", filter_complex,
+        "-map", "[v]",
+        "-map", "0:a?",
+        *_encode_args(encoder, bitrate, fps),
+        out_arg,
+    ]
+
+    logger.info("Rendu (largeur complete) : %s (%.1fs)", out_path.name, duration)
+    proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"ffmpeg a echoue pour {out_path.name}:\n{proc.stderr[-2500:]}"
+        )
+    if not out_path.exists() or out_path.stat().st_size == 0:
+        raise RuntimeError(f"Sortie vide pour {out_path}")
+    return out_path
+
+
 def probe_resolution(path: Path) -> tuple[int, int] | None:
     """Renvoie (largeur, hauteur) via ffprobe, ou None."""
     cmd = [

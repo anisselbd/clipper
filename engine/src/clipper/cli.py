@@ -27,8 +27,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--reframe",
         default=None,
-        choices=["auto", "face", "motion", "center"],
-        help="Strategie de recadrage : auto (par scene), face, motion (sport/action), center.",
+        choices=["auto", "face", "motion", "center", "fullwidth"],
+        help="Strategie de recadrage : auto (par scene), face, motion (sport/action), center, fullwidth (largeur complete, bandes floues).",
     )
     p.add_argument("--output", default=None, help="Repertoire de sortie (defaut output/).")
     p.add_argument("-v", "--verbose", action="store_true", help="Logs detailles (DEBUG).")
