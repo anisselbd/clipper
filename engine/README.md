@@ -92,6 +92,18 @@ Les réglages se font dans `.env` (voir `.env.example` pour la liste complète) 
 - **Sélection** : `CLIPS`, `MIN_DURATION`, `MAX_DURATION`.
 - **Recadrage** : `PER_SCENE_REFRAME`, `SCENE_THRESHOLD`, `FACE_CONFIDENCE`, `SAMPLES_PER_SCENE`.
 - **Rendu** : `FPS`, `VIDEO_ENCODER`, `VIDEO_BITRATE`.
+- **API / serveur** : `API_HOST`, `API_PORT` (8008), `PUBLIC_BASE_URL`, `WORKER_CONCURRENCY`, `DATA_DIR`.
+
+## API (serveur)
+
+Le moteur expose aussi une API FastAPI consommee par le front (voir le README racine du monorepo) :
+
+```bash
+uv run clipper-api          # http://localhost:8008
+# ou : uv run uvicorn clipper.api.server:app --reload --port 8008
+```
+
+Routes : `POST /jobs`, `GET /jobs/{id}`, `GET /jobs/{id}/events` (SSE), `GET /jobs/{id}/clips`, `GET /clips/{id}/file`, `GET /health`. Un `preflight` au demarrage detecte les capacites (libass, encodeurs, MediaPipe, LLM) et le code choisit ses chemins dessus. Les 4 points de bascule local/cloud sont derriere des providers (`storage/`, `llm/`, `encoder/`, `jobstore/`).
 
 ## Tests
 
