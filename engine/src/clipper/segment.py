@@ -55,16 +55,23 @@ Tu es un monteur expert en clips verticaux courts (TikTok, Reels, Shorts).
 On te donne le transcript reel d'une video, segment par segment, avec des
 timestamps en secondes. Ta tache : SELECTIONNER les passages les plus forts.
 
+D'abord, identifie le TYPE de contenu d'apres le transcript et adapte ta selection :
+- SPORT / ACTION (commentaire de match, course, jeu video...) : privilegie les
+  BUTS, grosses occasions, arrets decisifs, gestes techniques, celebrations et
+  montees en intensite. Inclus la breve montee qui precede l'action et la
+  reaction juste apres (le commentateur s'emballe, nomme le joueur, annonce le
+  score). Un titre = ce qui se passe (ex: "But de Messi a la 23e").
+- TALK / INTERVIEW / PODCAST / VLOG : privilegie accroches (hooks), punchlines,
+  prises de position tranchees, pics emotionnels, revelations, conseils actionnables.
+
 Regles imperatives :
 - Tu ne REFORMULES rien et tu n'INVENTES aucun contenu. Tu choisis uniquement
-  des plages temporelles existantes.
+  des plages temporelles existantes (le transcript peut contenir des fautes de
+  reconnaissance, fie-toi au sens).
 - Chaque clip doit etre auto-suffisant et comprehensible seul.
-- Privilegie : accroches (hooks), punchlines, prises de position tranchees,
-  pics emotionnels, revelations, conseils actionnables.
 - Duree cible de chaque clip : entre {min_dur:.0f} et {max_dur:.0f} secondes.
 - start et end DOIVENT coincider avec des frontieres de segments fournies
-  (debut d'un segment pour start, fin d'un segment pour end), pour ne pas
-  couper une phrase au milieu.
+  (debut d'un segment pour start, fin d'un segment pour end).
 - Classe par interet decroissant. Renvoie au plus {n} clips.
 
 Tu reponds UNIQUEMENT avec un tableau JSON valide, sans aucun texte autour,
@@ -303,21 +310,36 @@ def _windows(segments: list[TSegment], window_s: float = 540.0) -> list[list[TSe
 # Selection heuristique (fallback hors-ligne)
 # --------------------------------------------------------------------------- #
 
+# Marqueurs d'accroche (talk) et de temps fort (sport), FR + EN.
 _STRONG = re.compile(
     r"\b(jamais|toujours|secret|erreur|incroyable|important|attention|"
     r"argent|reussir|echec|peur|verite|probleme|solution|astuce|pourquoi|"
-    r"comment|million|gratuit)\b",
+    r"comment|million|gratuit|"
+    r"but|goal|gol|penalty|penalti|score|scores|saves?|chance|header|"
+    r"incredible|brilliant|amazing|what a|stands alone|winner|equalizer|"
+    r"offside|red card|free kick)\b",
     re.IGNORECASE,
 )
 
 
+def _audio_boost(start: float, end: float, peaks) -> float:
+    """Bonus de score si une reaction sonore forte tombe dans la fenetre."""
+    if not peaks:
+        return 0.0
+    best = 0.0
+    for p in peaks:
+        if start - 3.0 <= p.t <= end + 1.0:
+            best = max(best, min(25.0, p.prominence * 2.0))
+    return best
+
+
 def heuristic_select(
-    transcript: Transcript, *, n: int, min_dur: float, max_dur: float
+    transcript: Transcript, *, n: int, min_dur: float, max_dur: float, audio_peaks=None
 ) -> list[SelectedSegment]:
     """Selection sans LLM : fenetres glissantes scorees sur des signaux simples.
 
-    Signaux : presence de '?'/'!', mots forts, densite de parole. Suffisant pour
-    faire tourner le pipeline de bout en bout hors-ligne ; le LLM fait mieux.
+    Signaux : '?'/'!', mots forts (talk + sport), densite de parole, et bonus de
+    proximite avec un pic sonore (temps fort). Le LLM fait mieux.
     """
     segments = transcript.segments
     if not segments:
@@ -346,6 +368,7 @@ def heuristic_select(
             + text.count("!") * 8
             + len(_STRONG.findall(text)) * 6
             + min(density * 4.0, 30.0)
+            + _audio_boost(start, end, audio_peaks)
         )
         candidates.append(
             SelectedSegment(
@@ -353,7 +376,7 @@ def heuristic_select(
                 end=round(end, 2),
                 title=_make_title(text),
                 hook_score=int(min(100, 30 + score)),
-                reason="Selection heuristique (LLM indisponible) : densite et marqueurs d'accroche.",
+                reason="Selection heuristique : densite, marqueurs d'accroche et reactions sonores.",
                 source="heuristic",
             )
         )
@@ -385,8 +408,13 @@ def _complete_window(provider, system: str, user: str, use_schema: list[bool]) -
         raise
 
 
-def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegment]:
-    """Renvoie au plus config.clips segments, via LLM puis fallback heuristique."""
+def select_segments(transcript: Transcript, config: Config, audio_peaks=None) -> list[SelectedSegment]:
+    """Renvoie au plus config.clips segments, via LLM puis fallback heuristique.
+
+    audio_peaks (optionnel) : reactions sonores fortes (cf. clipper.highlights),
+    passees en indices au LLM et utilisees pour booster l'heuristique. Utile sur
+    le sport (ancrage des gros moments) ; ignore si vide.
+    """
     n = config.clips
     min_dur, max_dur = config.min_duration, config.max_duration
 
@@ -396,6 +424,15 @@ def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegm
 
     provider = build_chat_client(config)
     system = SYSTEM_PROMPT.format(min_dur=min_dur, max_dur=max_dur, n=n)
+
+    audio_hint = ""
+    if audio_peaks:
+        moments = ", ".join(f"{p.t:.0f}" for p in sorted(audio_peaks, key=lambda p: p.t)[:20])
+        audio_hint = (
+            "\n\nIndices audio : des reactions sonores fortes (probablement de gros "
+            f"moments) surviennent autour de ces instants (s) : {moments}. "
+            "Pondere ces zones a la hausse si le contenu est du sport/action."
+        )
 
     retries = max(1, config.llm_retries)
     # Sortie structuree activable ; desactivee a la volee si le serveur la refuse.
@@ -408,7 +445,7 @@ def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegm
             view = render_transcript_view(win)
             user = (
                 "Transcript (timestamps en secondes) :\n\n"
-                f"{view}\n\n"
+                f"{view}{audio_hint}\n\n"
                 f"Selectionne les meilleurs clips ({min_dur:.0f}-{max_dur:.0f}s). "
                 "Reponds uniquement avec le tableau JSON."
             )
@@ -442,7 +479,7 @@ def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegm
     except ProviderUnavailable as exc:
         logger.warning("LLM indisponible (%s). Bascule sur le fallback heuristique.", exc)
 
-    selected = heuristic_select(transcript, n=n, min_dur=min_dur, max_dur=max_dur)
+    selected = heuristic_select(transcript, n=n, min_dur=min_dur, max_dur=max_dur, audio_peaks=audio_peaks)
     logger.info("Selection heuristique : %d clip(s).", len(selected))
     return selected
 

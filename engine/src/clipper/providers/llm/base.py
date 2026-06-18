@@ -16,6 +16,9 @@ class LLMProvider(ABC):
     name: str = "base"
 
     @abstractmethod
-    def select_segments(self, transcript: Transcript, config: Config) -> list:
-        """Renvoie une liste de SelectedSegment (cf. clipper.segment)."""
+    def select_segments(self, transcript: Transcript, config: Config, audio_peaks=None) -> list:
+        """Renvoie une liste de SelectedSegment (cf. clipper.segment).
+
+        audio_peaks : reactions sonores fortes optionnelles (cf. highlights).
+        """
         raise NotImplementedError

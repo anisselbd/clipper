@@ -53,6 +53,8 @@ class Config:
     clips: int = field(default_factory=lambda: int(os.getenv("CLIPS", "8")))
     min_duration: float = field(default_factory=lambda: float(os.getenv("MIN_DURATION", "20")))
     max_duration: float = field(default_factory=lambda: float(os.getenv("MAX_DURATION", "60")))
+    # Detecte les reactions sonores fortes (temps forts sport) en indice de selection.
+    audio_highlights: bool = field(default_factory=lambda: _env_bool("AUDIO_HIGHLIGHTS", True))
 
     # --- Recadrage ---
     # auto (decision par scene), face, motion, center.

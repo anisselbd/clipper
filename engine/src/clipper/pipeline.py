@@ -91,7 +91,17 @@ def run(
 
     # 3. Selection des moments forts (LLM, fallback heuristique)
     emit("selecting", 0.50, "Selection des meilleurs moments")
-    selected = llm.select_segments(transcript, config)
+    audio_peaks = None
+    if config.audio_highlights:
+        wav = config.cache_dir / f"{src.path.stem}.16k.wav"
+        if wav.exists():
+            try:
+                from .highlights import detect_highlights
+
+                audio_peaks = detect_highlights(wav)
+            except Exception as exc:
+                logger.warning("Detection de temps forts audio ignoree (%s).", exc)
+    selected = llm.select_segments(transcript, config, audio_peaks=audio_peaks)
     if not selected:
         logger.error("Aucun segment selectionne, arret.")
         emit("done", 1.0, "Aucun segment")
