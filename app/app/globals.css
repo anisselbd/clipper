@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #07070a;
+  --panel: rgba(255, 255, 255, 0.045);
+  --panel-strong: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.09);
+  --text: #f3f3f6;
+  --muted: #9a9aa6;
+  --accent: #5b8cff;
+  --gold: #ffd60a;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+    system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Halo de fond discret facon macOS */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(1100px 720px at 50% -12%, rgba(91, 140, 255, 0.12), transparent 60%),
+    radial-gradient(900px 620px at 92% 4%, rgba(139, 92, 255, 0.08), transparent 55%);
+}
+
+.glass {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, #6a97ff, #4d77f5);
+  color: white;
+  box-shadow: 0 6px 20px rgba(77, 119, 245, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 26px rgba(77, 119, 245, 0.45);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.field {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.field:focus {
+  outline: none;
+  border-color: rgba(91, 140, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+.dot-pulse { animation: pulseDot 1.2s ease-in-out infinite; }
+
+@keyframes barShimmer {
+  100% { transform: translateX(260%); }
+}
+.bar-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.bar-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  animation: barShimmer 1.7s ease-in-out infinite;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.35s ease both; }

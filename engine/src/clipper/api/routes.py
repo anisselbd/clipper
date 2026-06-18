@@ -104,7 +104,8 @@ async def job_events(job_id: str, request: Request):
             "status": job.get("status"),
         })}
         if job.get("status") in ("done", "error"):
-            yield {"event": job["status"], "data": json.dumps({"type": job["status"], "job_id": job_id})}
+            name = "job_error" if job["status"] == "error" else "done"
+            yield {"event": name, "data": json.dumps({"type": job["status"], "job_id": job_id, "error": job.get("error")})}
             return
 
         q = bus.subscribe(job_id)
@@ -117,10 +118,13 @@ async def job_events(job_id: str, request: Request):
                 except Exception:
                     await asyncio.sleep(0.2)
                     continue
-                if ev.get("type") == "_end":
+                etype = ev.get("type")
+                if etype == "_end":
                     break
-                yield {"event": ev.get("type", "message"), "data": json.dumps(ev)}
-                if ev.get("type") in ("done", "error"):
+                # 'error' renomme 'job_error' pour ne pas heurter l'event natif EventSource.
+                name = "job_error" if etype == "error" else (etype or "message")
+                yield {"event": name, "data": json.dumps(ev)}
+                if etype in ("done", "error"):
                     break
         finally:
             bus.unsubscribe(job_id, q)
