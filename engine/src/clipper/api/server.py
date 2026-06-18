@@ -25,6 +25,8 @@ logger = logging.getLogger("clipper.api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import threading
+
     config = Config()
     config.ensure_dirs()
     config.data_dir.mkdir(parents=True, exist_ok=True)
@@ -36,11 +38,28 @@ async def lifespan(app: FastAPI):
     app.state.providers = providers
     app.state.bus = EventBus()
     app.state.worker = JobWorker(config, providers, app.state.bus, concurrency=config.worker_concurrency)
+
+    # Auto-demarrage non bloquant d'un petit LLM local si aucun n'est joignable.
+    # L'API est prete tout de suite ; les jobs lancent ensuite avec le LLM des
+    # qu'il repond (sinon heuristique). Met a jour config.llm_base_url en place.
+    def _bring_up_llm() -> None:
+        from ..llm_server import ensure_local_llm
+
+        try:
+            config.llm_base_url = ensure_local_llm(config)
+        except Exception:
+            logger.debug("Auto-demarrage LLM en echec", exc_info=True)
+
+    threading.Thread(target=_bring_up_llm, daemon=True).start()
+
     logger.info("API prete (concurrence=%d).", config.worker_concurrency)
     try:
         yield
     finally:
         app.state.worker.shutdown()
+        from ..llm_server import stop_local_llm
+
+        stop_local_llm()
 
 
 def create_app() -> FastAPI:
@@ -82,17 +101,26 @@ def _start_parent_watchdog() -> None:
     except ValueError:
         return
 
+    def _exit_clean() -> None:
+        try:
+            from ..llm_server import stop_local_llm
+
+            stop_local_llm()  # ne pas laisser de llama-server orphelin
+        except Exception:
+            pass
+        os._exit(0)
+
     def watch() -> None:
         while True:
             try:
                 os.kill(ppid, 0)  # parent vivant
             except ProcessLookupError:
                 logging.getLogger("clipper.api").info("App parente fermee, arret du moteur.")
-                os._exit(0)
+                _exit_clean()
             except PermissionError:
                 pass  # vivant mais autre utilisateur (rare)
             except OSError:
-                os._exit(0)
+                _exit_clean()
             time.sleep(1.5)
 
     threading.Thread(target=watch, daemon=True).start()

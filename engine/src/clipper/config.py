@@ -42,6 +42,15 @@ class Config:
     # Sortie structuree (RETEX) : response_format json_schema cote serveur.
     llm_structured_output: bool = field(default_factory=lambda: _env_bool("LLM_STRUCTURED_OUTPUT", True))
     preflight_llm_timeout: float = field(default_factory=lambda: float(os.getenv("PREFLIGHT_LLM_TIMEOUT", "3")))
+    # Auto-demarrage d'un petit LLM local si aucun n'est joignable (app autonome).
+    # Si un LLM repond deja sur LLM_BASE_URL (ton gros modele), il est prefere.
+    llm_autostart: bool = field(default_factory=lambda: _env_bool("LLM_AUTOSTART", True))
+    llm_autostart_model_url: str = field(default_factory=lambda: os.getenv(
+        "LLM_AUTOSTART_MODEL_URL",
+        "https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+    ))
+    llm_autostart_port: int = field(default_factory=lambda: int(os.getenv("LLM_AUTOSTART_PORT", "8077")))
+    llm_server_bin: str = field(default_factory=lambda: os.getenv("LLM_SERVER_BIN", "llama-server"))
 
     # --- Transcription (faster-whisper) ---
     whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "small"))

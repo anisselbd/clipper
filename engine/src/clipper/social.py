@@ -33,10 +33,15 @@ PLATFORM_TAGS = {
 SOCIAL_SYSTEM = """\
 Tu es un expert du copywriting pour clips verticaux courts (TikTok, YouTube
 Shorts, Instagram Reels). On te donne une liste de clips, chacun avec un titre
-et un extrait du transcript reel. Pour CHAQUE clip, ecris :
-- "caption" : une accroche courte et percutante (1 a 2 phrases) en {lang},
+et un extrait du transcript reel.
+
+IMPORTANT : ecris TOUT le texte (caption ET youtube_title) en {lang_name} ({lang}),
+quelle que soit la langue du transcript. C'est imperatif.
+
+Pour CHAQUE clip, ecris :
+- "caption" : une accroche courte et percutante (1 a 2 phrases) en {lang_name},
   pensee pour stopper le scroll. Un emoji max, pas de hashtags ici.
-- "youtube_title" : un titre court et accrocheur pour YouTube Shorts (en {lang}).
+- "youtube_title" : un titre court et accrocheur pour YouTube Shorts (en {lang_name}).
 - "hashtags" : 5 a 8 hashtags pertinents lies au CONTENU (sujet, noms, theme).
   N'inclus PAS #fyp, #shorts, #reels (ajoutes automatiquement).
 
@@ -174,8 +179,9 @@ def generate_social_kits(clips: list[dict], config: Config) -> list[SocialKit]:
     if not clips:
         return []
 
+    lang_names = {"fr": "francais", "en": "anglais", "es": "espagnol", "de": "allemand", "it": "italien", "pt": "portugais"}
     provider = build_chat_client(config)
-    system = SOCIAL_SYSTEM.format(lang=config.lang)
+    system = SOCIAL_SYSTEM.format(lang=config.lang, lang_name=lang_names.get(config.lang, config.lang))
     payload = [
         {"clip_id": c["clip_id"], "title": c.get("title", ""), "text": (c.get("text") or "")[:600]}
         for c in clips
