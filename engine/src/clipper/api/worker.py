@@ -79,6 +79,7 @@ class JobWorker:
                 "selection_source": meta.get("selection_source"),
                 "file_key": file_key,
                 "thumb_key": thumb_key,
+                "social": meta.get("social"),
             })
             self.bus.publish(job_id, {
                 "type": "clip", "job_id": job_id,

@@ -29,6 +29,19 @@ export type Clip = {
   selection_source?: string | null;
   url?: string | null;
   thumb_url?: string | null;
+  social?: SocialKit | null;
+};
+
+export type SocialKit = {
+  caption?: string;
+  youtube_title?: string;
+  hashtags?: string[];
+  source?: string;
+  platforms?: {
+    tiktok?: { caption?: string };
+    shorts?: { title?: string; description?: string };
+    reels?: { caption?: string };
+  };
 };
 
 export type Preflight = {

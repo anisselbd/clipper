@@ -108,6 +108,20 @@ def run(
         return {"video": src.title, "clips": []}
     emit("selecting", 0.60, f"{len(selected)} clips retenus")
 
+    # Kit social pret-a-poster par clip (un appel LLM batche, fallback heuristique).
+    emit("selecting", 0.62, "Generation des legendes")
+    social_inputs = [
+        {
+            "clip_id": f"clip_{i:02d}",
+            "title": seg.title,
+            "text": " ".join(w.text for w in transcript.words_between(seg.start, seg.end)),
+        }
+        for i, seg in enumerate(selected)
+    ]
+    from .social import generate_social_kits
+
+    social_kits = {k.clip_id: k for k in generate_social_kits(social_inputs, config)}
+
     detector = FaceDetector(config.models_dir, min_confidence=config.face_confidence)
     words = transcript.all_words()
     logger.info("Sous-titres : backend %s.", report.subtitle_backend)
@@ -184,6 +198,11 @@ def run(
                 "file": str(out_path.relative_to(config.output_dir)),
                 "thumb": str(thumb_path.relative_to(config.output_dir)) if has_thumb else None,
             }
+            # Kit social pret-a-poster (legende, hashtags, variantes plateformes).
+            kit = social_kits.get(clip_id)
+            if kit is not None:
+                meta["social"] = kit.as_dict()
+                (clip_dir / "post.txt").write_text(kit.to_post_text(), encoding="utf-8")
             (clip_dir / "meta.json").write_text(
                 json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
             )

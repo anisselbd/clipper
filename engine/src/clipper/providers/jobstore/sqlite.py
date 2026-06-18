@@ -56,12 +56,18 @@ class SqliteJobStore(JobStore):
                     selection_source TEXT,
                     file_key TEXT,
                     thumb_key TEXT,
+                    social TEXT,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (job_id) REFERENCES jobs(id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_clips_job ON clips(job_id);
                 """
             )
+            # Migration douce pour les bases creees avant la colonne social.
+            try:
+                self._conn.execute("ALTER TABLE clips ADD COLUMN social TEXT")
+            except sqlite3.OperationalError:
+                pass
             self._conn.commit()
 
     # --- jobs ---
@@ -104,16 +110,19 @@ class SqliteJobStore(JobStore):
     def add_clip(self, job_id: str, clip: dict) -> dict:
         clip_id = clip["clip_id"]
         gid = f"{job_id}_{clip_id}"
+        social = clip.get("social")
         with self._lock:
             self._conn.execute(
                 'INSERT OR REPLACE INTO clips (id, job_id, clip_id, order_index, title, hook_score, '
-                'duration, width, height, start, "end", reason, selection_source, file_key, thumb_key, created_at) '
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                'duration, width, height, start, "end", reason, selection_source, file_key, thumb_key, social, created_at) '
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     gid, job_id, clip_id, clip.get("order_index", 0), clip.get("title"),
                     clip.get("hook_score"), clip.get("duration"), clip.get("width"), clip.get("height"),
                     clip.get("start"), clip.get("end"), clip.get("reason"), clip.get("selection_source"),
-                    clip.get("file_key"), clip.get("thumb_key"), _now(),
+                    clip.get("file_key"), clip.get("thumb_key"),
+                    json.dumps(social, ensure_ascii=False) if social is not None else None,
+                    _now(),
                 ),
             )
             self._conn.commit()
@@ -122,14 +131,24 @@ class SqliteJobStore(JobStore):
     def get_clip(self, clip_id: str) -> dict | None:
         with self._lock:
             row = self._conn.execute("SELECT * FROM clips WHERE id = ?", (clip_id,)).fetchone()
-        return dict(row) if row else None
+        return self._clip_row(row) if row else None
 
     def list_clips(self, job_id: str) -> list[dict]:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM clips WHERE job_id = ? ORDER BY order_index", (job_id,)
             ).fetchall()
-        return [dict(r) for r in rows]
+        return [self._clip_row(r) for r in rows]
+
+    @staticmethod
+    def _clip_row(row: sqlite3.Row) -> dict:
+        d = dict(row)
+        if d.get("social"):
+            try:
+                d["social"] = json.loads(d["social"])
+            except (json.JSONDecodeError, TypeError):
+                d["social"] = None
+        return d
 
     @staticmethod
     def _job_row(row: sqlite3.Row) -> dict:

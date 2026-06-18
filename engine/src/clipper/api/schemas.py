@@ -39,6 +39,7 @@ class ClipResponse(BaseModel):
     selection_source: str | None = None
     url: str | None = None
     thumb_url: str | None = None
+    social: dict | None = None
 
 
 class HealthResponse(BaseModel):

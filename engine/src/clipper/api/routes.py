@@ -44,6 +44,7 @@ def _clip_dict(storage, clip: dict) -> dict:
         "selection_source": clip.get("selection_source"),
         "url": storage.get_url(clip["file_key"]) if clip.get("file_key") else None,
         "thumb_url": storage.get_url(clip["thumb_key"]) if clip.get("thumb_key") else None,
+        "social": clip.get("social"),
     }
 
 
