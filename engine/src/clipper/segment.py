@@ -20,10 +20,35 @@ import re
 from dataclasses import asdict, dataclass
 
 from .config import Config
-from .providers import ProviderUnavailable, get_provider
+from .providers.llm.client import ProviderUnavailable, build_chat_client
 from .transcribe import TSegment, Transcript
 
 logger = logging.getLogger("clipper.segment")
+
+# Sortie structuree (RETEX) : contraint le serveur a renvoyer un tableau JSON
+# conforme (converti en grammaire GBNF cote llama.cpp). Degrade en cas de refus.
+SEGMENTS_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "clip_segments",
+        "strict": True,
+        "schema": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "start": {"type": "number"},
+                    "end": {"type": "number"},
+                    "title": {"type": "string"},
+                    "hook_score": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "reason": {"type": "string"},
+                },
+                "required": ["start", "end", "title", "hook_score", "reason"],
+                "additionalProperties": False,
+            },
+        },
+    },
+}
 
 SYSTEM_PROMPT = """\
 Tu es un monteur expert en clips verticaux courts (TikTok, Reels, Shorts).
@@ -346,6 +371,20 @@ def _make_title(text: str) -> str:
 # Point d'entree
 # --------------------------------------------------------------------------- #
 
+def _complete_window(provider, system: str, user: str, use_schema: list[bool]) -> str:
+    """Appel LLM avec sortie structuree, degradation gracieuse si refusee."""
+    rf = SEGMENTS_RESPONSE_FORMAT if use_schema[0] else None
+    try:
+        return provider.complete(system, user, temperature=0.0, max_tokens=2048, response_format=rf)
+    except ProviderUnavailable:
+        if rf is not None:
+            # Le serveur ne supporte peut-etre pas response_format : on reessaie sans.
+            use_schema[0] = False
+            logger.warning("response_format refuse/indisponible, bascule sans schema structure.")
+            return provider.complete(system, user, temperature=0.0, max_tokens=2048, response_format=None)
+        raise
+
+
 def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegment]:
     """Renvoie au plus config.clips segments, via LLM puis fallback heuristique."""
     n = config.clips
@@ -355,10 +394,12 @@ def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegm
         logger.warning("Transcript vide : aucune selection possible.")
         return []
 
-    provider = get_provider(config)
+    provider = build_chat_client(config)
     system = SYSTEM_PROMPT.format(min_dur=min_dur, max_dur=max_dur, n=n)
 
     retries = max(1, config.llm_retries)
+    # Sortie structuree activable ; desactivee a la volee si le serveur la refuse.
+    use_schema = [bool(config.llm_structured_output)]
     try:
         collected: list[SelectedSegment] = []
         windows = _windows(transcript.segments)
@@ -375,7 +416,7 @@ def select_segments(transcript: Transcript, config: Config) -> list[SelectedSegm
             # si la reponse n'est pas un JSON exploitable.
             raw: list[dict] | None = None
             for attempt in range(retries):
-                raw_text = provider.complete(system, user, temperature=0.0, max_tokens=2048)
+                raw_text = _complete_window(provider, system, user, use_schema)
                 try:
                     parsed = parse_llm_segments(raw_text)
                 except ValueError:

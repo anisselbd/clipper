@@ -39,6 +39,9 @@ class Config:
     llm_disable_thinking: bool = field(default_factory=lambda: _env_bool("LLM_DISABLE_THINKING", True))
     # Reessais par fenetre si la reponse n'est pas un JSON exploitable.
     llm_retries: int = field(default_factory=lambda: int(os.getenv("LLM_RETRIES", "2")))
+    # Sortie structuree (RETEX) : response_format json_schema cote serveur.
+    llm_structured_output: bool = field(default_factory=lambda: _env_bool("LLM_STRUCTURED_OUTPUT", True))
+    preflight_llm_timeout: float = field(default_factory=lambda: float(os.getenv("PREFLIGHT_LLM_TIMEOUT", "3")))
 
     # --- Transcription (faster-whisper) ---
     whisper_model: str = field(default_factory=lambda: os.getenv("WHISPER_MODEL", "small"))
@@ -68,9 +71,16 @@ class Config:
     caption_font: str | None = field(default_factory=lambda: os.getenv("FONT_PATH") or None)
     caption_font_size: int = field(default_factory=lambda: int(os.getenv("CAPTION_FONT_SIZE", "76")))
 
+    # --- API / serveur ---
+    api_host: str = field(default_factory=lambda: os.getenv("API_HOST", "127.0.0.1"))
+    api_port: int = field(default_factory=lambda: int(os.getenv("API_PORT", "8008")))
+    public_base_url: str = field(default_factory=lambda: os.getenv("PUBLIC_BASE_URL", "http://localhost:8008"))
+    worker_concurrency: int = field(default_factory=lambda: int(os.getenv("WORKER_CONCURRENCY", "1")))
+
     # --- Chemins ---
     output_dir: Path = field(default_factory=lambda: Path(os.getenv("OUTPUT_DIR", "output")))
     cache_dir: Path = field(default_factory=lambda: Path(os.getenv("CACHE_DIR", "cache")))
+    data_dir: Path = field(default_factory=lambda: Path(os.getenv("DATA_DIR", "data")))
 
     def ensure_dirs(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -80,3 +90,7 @@ class Config:
     @property
     def models_dir(self) -> Path:
         return self.cache_dir / "models"
+
+    @property
+    def db_path(self) -> Path:
+        return self.data_dir / "clipper.db"

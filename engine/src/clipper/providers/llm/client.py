@@ -1,18 +1,25 @@
-"""Fournisseur LLM local via endpoint compatible OpenAI.
+"""Client bas niveau OpenAI-compatible (llama-server, vLLM, LM Studio, ...).
 
-Cible par defaut : llama-server (llama.cpp) servant Qwen3 sur
-http://localhost:8080/v1. Tout endpoint exposant /chat/completions au format
-OpenAI fonctionne (vLLM, LM Studio, Ollama en mode OpenAI, etc.).
+Sortie structuree (lecon RETEX) : supporte response_format json_schema cote
+serveur pour garantir un JSON conforme, et chat_template_kwargs pour desactiver
+le thinking de Qwen3.
 """
 
 from __future__ import annotations
 
 import httpx
 
-from .base import LLMProvider, ProviderUnavailable
+
+class ProviderUnavailable(RuntimeError):
+    """Le service LLM est injoignable (reseau, serveur arrete, timeout).
+
+    Intercepte en amont pour basculer sur le fallback heuristique.
+    """
 
 
-class LocalLLMProvider(LLMProvider):
+class ChatClient:
+    """Appel /chat/completions, renvoie le contenu texte de la reponse."""
+
     name = "local_llm"
 
     def __init__(
@@ -27,8 +34,6 @@ class LocalLLMProvider(LLMProvider):
         self.model = model
         self.api_key = api_key
         self.timeout = timeout
-        # Parametres supplementaires fusionnes dans le corps (ex.
-        # chat_template_kwargs pour desactiver le thinking de Qwen3).
         self.extra_body = extra_body or {}
 
     def complete(
@@ -36,14 +41,15 @@ class LocalLLMProvider(LLMProvider):
         system: str,
         user: str,
         *,
-        temperature: float = 0.2,
+        temperature: float = 0.0,
         max_tokens: int = 2048,
+        response_format: dict | None = None,
     ) -> str:
         url = f"{self.base_url}/chat/completions"
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        payload = {
+        payload: dict = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
@@ -54,6 +60,9 @@ class LocalLLMProvider(LLMProvider):
             "stream": False,
             **self.extra_body,
         }
+        if response_format is not None:
+            payload["response_format"] = response_format
+
         try:
             resp = httpx.post(url, json=payload, headers=headers, timeout=self.timeout)
             resp.raise_for_status()
@@ -65,3 +74,17 @@ class LocalLLMProvider(LLMProvider):
             return data["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, ValueError) as exc:
             raise ProviderUnavailable(f"reponse LLM inattendue: {exc}") from exc
+
+
+def build_chat_client(config) -> ChatClient:
+    extra_body: dict = {}
+    if config.llm_disable_thinking:
+        # Convention Qwen3 via llama.cpp --jinja ; ignore par les autres modeles.
+        extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+    return ChatClient(
+        base_url=config.llm_base_url,
+        model=config.llm_model,
+        api_key=config.llm_api_key,
+        timeout=config.llm_timeout,
+        extra_body=extra_body,
+    )
