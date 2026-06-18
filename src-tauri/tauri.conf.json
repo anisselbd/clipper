@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../app/out",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "npm --prefix ../app run dev",
-    "beforeBuildCommand": "npm --prefix ../app run build"
+    "beforeDevCommand": "npm --prefix /Users/anisse/Desktop/Dev/clipper/app run dev",
+    "beforeBuildCommand": "npm --prefix /Users/anisse/Desktop/Dev/clipper/app run build"
   },
   "app": {
     "windows": [

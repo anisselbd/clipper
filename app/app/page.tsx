@@ -73,9 +73,22 @@ export default function Home() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    getHealth()
-      .then((h) => setHealth(h.preflight))
-      .catch(() => setHealth(null));
+    // Au lancement de l'app desktop, le moteur met quelques secondes a demarrer :
+    // on reessaie /health jusqu'a ce qu'il reponde.
+    let cancelled = false;
+    let tries = 0;
+    const tick = async () => {
+      try {
+        const h = await getHealth();
+        if (!cancelled) setHealth(h.preflight);
+      } catch {
+        if (!cancelled && tries++ < 30) setTimeout(tick, 1000);
+      }
+    };
+    tick();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const cleanup = useCallback(() => {
