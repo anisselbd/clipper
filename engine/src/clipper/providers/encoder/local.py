@@ -41,6 +41,7 @@ class LocalEncoder(EncoderProvider):
         target_h: int = 1920,
         fps: int = 30,
         bitrate: str = "8M",
+        delogo: str = "",
     ) -> Path:
         # Layout "largeur complete" (bandes floues) : pas de crop, on garde
         # toute la largeur. Choisi quand reframe_mode == "fullwidth".
@@ -50,16 +51,16 @@ class LocalEncoder(EncoderProvider):
                 concat_list=concat_path, ass_path=ass_path,
                 use_libass=(self.subtitle_backend == "libass"),
                 target_w=target_w, target_h=target_h, fps=fps,
-                encoder=self.video_encoder, bitrate=bitrate,
+                encoder=self.video_encoder, bitrate=bitrate, delogo=delogo,
             )
         if self.subtitle_backend == "libass" and ass_path is not None:
             return render_clip(
                 source, start, end, plan, ass_path, out_path,
                 target_w=target_w, target_h=target_h, fps=fps,
-                encoder=self.video_encoder, bitrate=bitrate,
+                encoder=self.video_encoder, bitrate=bitrate, delogo=delogo,
             )
         return render_clip_overlay(
             source, start, end, plan, concat_path, out_path,
             target_w=target_w, target_h=target_h, fps=fps,
-            encoder=self.video_encoder, bitrate=bitrate,
+            encoder=self.video_encoder, bitrate=bitrate, delogo=delogo,
         )

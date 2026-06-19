@@ -25,6 +25,7 @@ class NvencEncoder(EncoderProvider):
         target_h: int = 1920,
         fps: int = 30,
         bitrate: str = "8M",
+        delogo: str = "",
     ) -> Path:
         # TODO (phase 2) : meme filtergraph que LocalEncoder mais -c:v h264_nvenc
         # (worker GPU). Le build ffmpeg du worker doit embarquer libass pour le

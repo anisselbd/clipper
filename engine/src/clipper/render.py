@@ -114,6 +114,7 @@ def render_clip(
     fps: int = 30,
     encoder: str = "h264_videotoolbox",
     bitrate: str = "8M",
+    delogo: str = "",
 ) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     duration = max(0.1, end - start)
@@ -122,6 +123,8 @@ def render_clip(
     workdir = out_path.parent
     ass_name = ass_path.name
     filtergraph = build_filtergraph(plan, ass_name, target_w, target_h)
+    if delogo:
+        filtergraph = f"{delogo},{filtergraph}"
 
     cmd = [
         "ffmpeg", "-y",
@@ -157,11 +160,13 @@ def render_clip_overlay(
     fps: int = 30,
     encoder: str = "h264_videotoolbox",
     bitrate: str = "8M",
+    delogo: str = "",
 ) -> Path:
     """Rendu sans libass : crop + scale + incrustation des sous-titres via overlay PNG."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     duration = max(0.1, end - start)
     crop = build_crop_filter(plan)
+    pre = f"{delogo}," if delogo else ""
 
     cmd = [
         "ffmpeg", "-y",
@@ -172,13 +177,13 @@ def render_clip_overlay(
     if concat_list is not None:
         cmd += ["-f", "concat", "-safe", "0", "-i", str(concat_list.resolve())]
         filter_complex = (
-            f"[0:v]{crop},scale={target_w}:{target_h}:flags=lanczos,setsar=1[base];"
+            f"[0:v]{pre}{crop},scale={target_w}:{target_h}:flags=lanczos,setsar=1[base];"
             f"[1:v]format=rgba,scale={target_w}:{target_h}[ov];"
             f"[base][ov]overlay=0:0:shortest=1,format=yuv420p[v]"
         )
     else:
         filter_complex = (
-            f"[0:v]{crop},scale={target_w}:{target_h}:flags=lanczos,setsar=1,"
+            f"[0:v]{pre}{crop},scale={target_w}:{target_h}:flags=lanczos,setsar=1,"
             f"format=yuv420p[v]"
         )
 
@@ -216,6 +221,7 @@ def render_clip_fullwidth(
     encoder: str = "h264_videotoolbox",
     bitrate: str = "8M",
     blur_sigma: float = 22.0,
+    delogo: str = "",
 ) -> Path:
     """Rendu 'largeur complete' : toute la largeur de la source dans une bande
     centrale, fond rempli par un zoom flou de la meme image, sous-titres en bas.
@@ -226,12 +232,14 @@ def render_clip_fullwidth(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     duration = max(0.1, end - start)
     W, H = target_w, target_h
+    pre = f"{delogo}," if delogo else ""
 
     # Fond : zoom de la source qui couvre tout le cadre, puis flou + assombri.
     # Premier plan : source mise a la largeur du cadre (toute la largeur gardee),
-    # centree verticalement par-dessus.
+    # centree verticalement par-dessus. Le delogo est applique avant le split
+    # pour effacer le logo a la fois dans le fond et au premier plan.
     base = (
-        f"[0:v]split=2[bg][fg];"
+        f"[0:v]{pre}split=2[bg][fg];"
         f"[bg]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
         f"gblur=sigma={blur_sigma},eq=brightness=-0.12:saturation=1.05[bgb];"
         f"[fg]scale={W}:-2:flags=lanczos,setsar=1[fgs];"

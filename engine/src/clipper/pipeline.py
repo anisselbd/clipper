@@ -74,6 +74,20 @@ def run(
     src = download(url, config.cache_dir)
     emit("downloading", 0.10, src.title)
 
+    # Detection du logo de chaine (une fois pour toute la video) : il est fixe a
+    # l'ecran pendant que le terrain bouge. On le masquera via delogo au rendu.
+    # Le bandeau score (qui bouge) n'est pas detecte, donc garde.
+    delogo_chain = ""
+    if config.mask_channel_logo:
+        try:
+            from .overlays import build_delogo_chain, detect_logo_regions
+
+            delogo_chain = build_delogo_chain(detect_logo_regions(src.path))
+            if delogo_chain:
+                emit("downloading", 0.12, "Logo de chaine detecte (masque au rendu)")
+        except Exception as exc:
+            logger.warning("Detection du logo de chaine ignoree (%s).", exc)
+
     # 2. Transcription mot a mot
     emit("transcribing", 0.15, "Transcription mot a mot")
     transcript = transcribe(
@@ -171,6 +185,7 @@ def run(
                 ass_path=ass_path, concat_path=concat,
                 target_w=config.target_w, target_h=config.target_h,
                 fps=config.fps, bitrate=config.video_bitrate,
+                delogo=delogo_chain,
             )
             shutil.rmtree(clip_dir / "_subs", ignore_errors=True)
 
@@ -195,6 +210,7 @@ def run(
                 "height": res[1] if res else None,
                 "scenes": plan.n_scenes,
                 "reframe_strategy": plan.strategy,
+                "logo_masked": bool(delogo_chain),
                 "file": str(out_path.relative_to(config.output_dir)),
                 "thumb": str(thumb_path.relative_to(config.output_dir)) if has_thumb else None,
             }

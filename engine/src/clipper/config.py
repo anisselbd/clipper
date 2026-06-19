@@ -66,9 +66,12 @@ class Config:
     audio_highlights: bool = field(default_factory=lambda: _env_bool("AUDIO_HIGHLIGHTS", True))
 
     # --- Recadrage ---
-    # auto (decision par scene), face, motion, center.
+    # auto (decision par scene), face, motion, center, fullwidth.
     reframe_mode: str = field(default_factory=lambda: os.getenv("REFRAME_MODE", "auto"))
     per_scene_reframe: bool = field(default_factory=lambda: _env_bool("PER_SCENE_REFRAME", True))
+    # Masque automatiquement le logo de chaine incruste (M6, TF1...) via delogo.
+    # Le bandeau score est garde (il bouge, donc non detecte comme statique).
+    mask_channel_logo: bool = field(default_factory=lambda: _env_bool("MASK_CHANNEL_LOGO", True))
     scene_threshold: float = field(default_factory=lambda: float(os.getenv("SCENE_THRESHOLD", "27")))
     face_confidence: float = field(default_factory=lambda: float(os.getenv("FACE_CONFIDENCE", "0.5")))
     samples_per_scene: int = field(default_factory=lambda: int(os.getenv("SAMPLES_PER_SCENE", "5")))

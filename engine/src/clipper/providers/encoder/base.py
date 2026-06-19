@@ -28,5 +28,6 @@ class EncoderProvider(ABC):
         target_h: int = 1920,
         fps: int = 30,
         bitrate: str = "8M",
+        delogo: str = "",
     ) -> Path:
         ...
