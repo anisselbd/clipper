@@ -44,8 +44,18 @@ def _clip_dict(storage, clip: dict) -> dict:
         "selection_source": clip.get("selection_source"),
         "url": storage.get_url(clip["file_key"]) if clip.get("file_key") else None,
         "thumb_url": storage.get_url(clip["thumb_key"]) if clip.get("thumb_key") else None,
+        # Chemin disque local (app desktop) : permet l'enregistrement natif du
+        # fichier sans passer par la navigation du webview. None en cloud.
+        "file_path": _local_path(storage, clip.get("file_key")),
         "social": clip.get("social"),
     }
+
+
+def _local_path(storage, file_key) -> str | None:
+    if not file_key:
+        return None
+    p = storage.path_for(file_key)
+    return str(p) if p else None
 
 
 @router.get("/health", response_model=HealthResponse)

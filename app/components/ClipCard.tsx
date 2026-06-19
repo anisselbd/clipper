@@ -1,11 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import type { Clip } from "@/lib/api";
+import { saveClip, type Clip } from "@/lib/api";
 
 export default function ClipCard({ clip }: { clip: Clip }) {
   const [copied, setCopied] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const social = clip.social;
+
+  const onSave = async () => {
+    if (saveState === "saving") return;
+    setSaveState("saving");
+    try {
+      await saveClip(clip);
+      setSaveState("saved");
+      setTimeout(() => setSaveState("idle"), 2500);
+    } catch {
+      setSaveState("error");
+      setTimeout(() => setSaveState("idle"), 2500);
+    }
+  };
+
+  const saveLabel =
+    saveState === "saving"
+      ? "Enregistrement..."
+      : saveState === "saved"
+        ? "Enregistré ✓"
+        : saveState === "error"
+          ? "Échec"
+          : "Télécharger";
 
   const readyCaption =
     social?.platforms?.tiktok?.caption ||
@@ -90,14 +113,15 @@ export default function ClipCard({ clip }: { clip: Clip }) {
               {copied ? "Copié ✓" : "Copier la légende"}
             </button>
           )}
-          {clip.url && (
-            <a
-              href={clip.url}
-              download={`${clip.clip_id}.mp4`}
-              className="flex-1 text-center text-[13px] font-medium rounded-xl py-2 border border-[var(--border)] hover:bg-white/5 transition-colors"
+          {(clip.file_path || clip.url) && (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saveState === "saving"}
+              className="flex-1 text-center text-[13px] font-medium rounded-xl py-2 border border-[var(--border)] hover:bg-white/5 transition-colors disabled:opacity-60"
             >
-              Telecharger
-            </a>
+              {saveLabel}
+            </button>
           )}
         </div>
       </div>

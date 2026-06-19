@@ -29,6 +29,7 @@ export type Clip = {
   selection_source?: string | null;
   url?: string | null;
   thumb_url?: string | null;
+  file_path?: string | null;
   social?: SocialKit | null;
 };
 
@@ -104,4 +105,33 @@ export async function revealJob(id: string): Promise<void> {
 
 export function jobEventsUrl(id: string): string {
   return `${API_BASE}/jobs/${id}/events`;
+}
+
+type TauriGlobal = {
+  core?: { invoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown> };
+};
+
+function tauri(): TauriGlobal | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as unknown as { __TAURI__?: TauriGlobal }).__TAURI__;
+}
+
+/** Enregistre un clip. Dans l'app desktop : copie vers ~/Telechargements +
+ * revele dans le Finder (sans navigation du webview). Dans un navigateur :
+ * telechargement classique. Renvoie le chemin enregistre (desktop) ou null. */
+export async function saveClip(clip: Clip): Promise<string | null> {
+  const name = `${(clip.title || clip.clip_id).slice(0, 60).trim() || clip.clip_id}.mp4`;
+  const t = tauri();
+  if (t?.core?.invoke && clip.file_path) {
+    return (await t.core.invoke("save_clip", { src: clip.file_path, name })) as string;
+  }
+  if (clip.url) {
+    const a = document.createElement("a");
+    a.href = clip.url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  return null;
 }

@@ -39,6 +39,7 @@ class ClipResponse(BaseModel):
     selection_source: str | None = None
     url: str | None = None
     thumb_url: str | None = None
+    file_path: str | None = None  # chemin disque local (app desktop)
     social: dict | None = None
 
 

@@ -10,6 +10,7 @@
     "beforeBuildCommand": "npm --prefix /Users/anisse/Desktop/Dev/clipper/app run build"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "clipper",
