@@ -408,7 +408,7 @@ def _complete_window(provider, system: str, user: str, use_schema: list[bool]) -
         raise
 
 
-def select_segments(transcript: Transcript, config: Config, audio_peaks=None) -> list[SelectedSegment]:
+def select_segments(transcript: Transcript, config: Config, audio_peaks=None, on_progress=None) -> list[SelectedSegment]:
     """Renvoie au plus config.clips segments, via LLM puis fallback heuristique.
 
     audio_peaks (optionnel) : reactions sonores fortes (cf. clipper.highlights),
@@ -440,8 +440,11 @@ def select_segments(transcript: Transcript, config: Config, audio_peaks=None) ->
     try:
         collected: list[SelectedSegment] = []
         windows = _windows(transcript.segments)
+        nwin = max(1, len(windows))
         logger.info("Selection LLM (%s) sur %d fenetre(s)...", provider.name, len(windows))
         for wi, win in enumerate(windows):
+            if on_progress is not None:
+                on_progress(wi / nwin, {"kind": "select", "window": wi + 1, "windows": nwin})
             view = render_transcript_view(win)
             user = (
                 "Transcript (timestamps en secondes) :\n\n"

@@ -8,12 +8,17 @@ re-telecharge pas.
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import yt_dlp
 
 logger = logging.getLogger("clipper.download")
+
+# Callback de progression du telechargement : (fraction 0..1, detail) -> None.
+DownloadProgressFn = Callable[[float, dict], None]
 
 
 @dataclass
@@ -25,7 +30,35 @@ class SourceVideo:
     duration: float  # secondes
 
 
-def download(url: str, cache_dir: Path) -> SourceVideo:
+def _make_hook(on_progress: DownloadProgressFn):
+    """Adapte les hooks yt-dlp (appeles tres souvent) en evenements throttled."""
+    last = {"t": 0.0}
+
+    def hook(d: dict) -> None:
+        status = d.get("status")
+        if status == "downloading":
+            now = time.monotonic()
+            if now - last["t"] < 0.25:  # throttle : ~4 maj/s max
+                return
+            last["t"] = now
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            done = d.get("downloaded_bytes") or 0
+            frac = (done / total) if total else 0.0
+            on_progress(frac, {
+                "kind": "download",
+                "downloaded": int(done),
+                "total": int(total),
+                "speed": float(d.get("speed") or 0.0),
+                "eta": int(d.get("eta") or 0),
+            })
+        elif status == "finished":
+            done = int(d.get("downloaded_bytes") or 0)
+            on_progress(1.0, {"kind": "download", "downloaded": done, "total": done, "speed": 0.0, "eta": 0})
+
+    return hook
+
+
+def download(url: str, cache_dir: Path, *, on_progress: DownloadProgressFn | None = None) -> SourceVideo:
     cache_dir.mkdir(parents=True, exist_ok=True)
     outtmpl = str(cache_dir / "%(id)s.%(ext)s")
 
@@ -39,6 +72,8 @@ def download(url: str, cache_dir: Path) -> SourceVideo:
         "no_warnings": True,
         "retries": 3,
     }
+    if on_progress is not None:
+        ydl_opts["progress_hooks"] = [_make_hook(on_progress)]
 
     logger.info("Telechargement : %s", url)
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

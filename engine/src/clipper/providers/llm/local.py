@@ -15,8 +15,8 @@ from .base import LLMProvider
 class LocalLLMProvider(LLMProvider):
     name = "local_llm"
 
-    def select_segments(self, transcript: Transcript, config: Config, audio_peaks=None) -> list:
+    def select_segments(self, transcript: Transcript, config: Config, audio_peaks=None, on_progress=None) -> list:
         # Import tardif pour eviter un cycle (segment importe les providers).
         from ...segment import select_segments
 
-        return select_segments(transcript, config, audio_peaks=audio_peaks)
+        return select_segments(transcript, config, audio_peaks=audio_peaks, on_progress=on_progress)

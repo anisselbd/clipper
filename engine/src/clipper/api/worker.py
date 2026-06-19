@@ -50,11 +50,12 @@ class JobWorker:
         storage = self.providers.storage
         cfg = self._job_config(job_id, params)
 
-        def on_progress(step: str, progress: float, message: str = "") -> None:
+        def on_progress(step: str, progress: float, message: str = "", detail: dict | None = None) -> None:
             store.update_job(job_id, status="running", step=step, progress=progress)
             self.bus.publish(job_id, {
                 "type": "progress", "job_id": job_id,
                 "step": step, "progress": progress, "message": message,
+                "detail": detail,
             })
 
         def on_clip(meta: dict) -> None:

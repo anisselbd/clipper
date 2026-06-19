@@ -62,17 +62,29 @@ def run(
     encoder = encoder or LocalEncoder.from_report(report)
     llm = llm or LocalLLMProvider()
 
-    def emit(step: str, progress: float, message: str = "") -> None:
-        if on_progress is not None:
+    def emit(step: str, progress: float, message: str = "", detail: dict | None = None) -> None:
+        if on_progress is None:
+            return
+        try:
+            on_progress(step, round(progress, 3), message, detail)
+        except TypeError:
+            # Ancien callback a 3 arguments (CLI) : pas de detail.
             try:
                 on_progress(step, round(progress, 3), message)
-            except Exception:  # un abonne SSE casse ne doit pas tuer le pipeline
+            except Exception:
                 logger.debug("on_progress a leve une exception", exc_info=True)
+        except Exception:  # un abonne SSE casse ne doit pas tuer le pipeline
+            logger.debug("on_progress a leve une exception", exc_info=True)
 
-    # 1. Telechargement
+    # 1. Telechargement (progression fine : octets + vitesse via hook yt-dlp)
     emit("downloading", 0.02, "Telechargement de la video")
-    src = download(url, config.cache_dir)
-    emit("downloading", 0.10, src.title)
+    src = download(
+        url, config.cache_dir,
+        on_progress=lambda frac, detail: emit(
+            "downloading", 0.02 + 0.10 * frac, "Telechargement de la video", detail
+        ),
+    )
+    emit("downloading", 0.12, src.title)
 
     # Detection du logo de chaine (une fois pour toute la video) : il est fixe a
     # l'ecran pendant que le terrain bouge. On le masquera via delogo au rendu.
@@ -88,7 +100,7 @@ def run(
         except Exception as exc:
             logger.warning("Detection du logo de chaine ignoree (%s).", exc)
 
-    # 2. Transcription mot a mot
+    # 2. Transcription mot a mot (progression par seconde d'audio traitee)
     emit("transcribing", 0.15, "Transcription mot a mot")
     transcript = transcribe(
         src.path,
@@ -97,6 +109,9 @@ def run(
         device=config.whisper_device,
         compute_type=config.whisper_compute_type,
         cache_dir=config.cache_dir,
+        on_progress=lambda frac, detail: emit(
+            "transcribing", 0.15 + 0.30 * frac, "Transcription mot a mot", detail
+        ),
     )
     (config.cache_dir / f"{src.video_id}.transcript.json").write_text(
         json.dumps(transcript.as_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
@@ -115,7 +130,12 @@ def run(
                 audio_peaks = detect_highlights(wav)
             except Exception as exc:
                 logger.warning("Detection de temps forts audio ignoree (%s).", exc)
-    selected = llm.select_segments(transcript, config, audio_peaks=audio_peaks)
+    selected = llm.select_segments(
+        transcript, config, audio_peaks=audio_peaks,
+        on_progress=lambda frac, detail: emit(
+            "selecting", 0.50 + 0.10 * frac, "Selection des meilleurs moments", detail
+        ),
+    )
     if not selected:
         logger.error("Aucun segment selectionne, arret.")
         emit("done", 1.0, "Aucun segment")
@@ -148,11 +168,12 @@ def run(
         clip_dir.mkdir(parents=True, exist_ok=True)
         base = 0.60 + 0.40 * i / n
         span = 0.40 / n
+        cdetail = {"kind": "render", "clip": i + 1, "clips": n, "title": seg.title}
         logger.info("=== %s : %.1f-%.1fs | %s ===", clip_id, seg.start, seg.end, seg.title)
 
         try:
             # 5. Recadrage
-            emit("reframing", base + span * 0.1, seg.title)
+            emit("reframing", base + span * 0.1, seg.title, cdetail)
             plan = compute_reframe(
                 src.path, seg.start, seg.end,
                 models_dir=config.models_dir, detector=detector,
@@ -163,7 +184,7 @@ def run(
             )
 
             # 6. Sous-titres : ASS toujours ecrit (artefact portable) + overlay si besoin.
-            emit("captioning", base + span * 0.4, seg.title)
+            emit("captioning", base + span * 0.4, seg.title, cdetail)
             ass_path = clip_dir / "subs.ass"
             ass_path.write_text(
                 generate_ass_for_clip(words, seg.start, seg.end, width=config.target_w, height=config.target_h),
@@ -178,7 +199,7 @@ def run(
                 )
 
             # 7. Rendu via l'EncoderProvider
-            emit("rendering", base + span * 0.6, seg.title)
+            emit("rendering", base + span * 0.6, seg.title, cdetail)
             out_path = clip_dir / "clip.mp4"
             encoder.encode_clip(
                 src.path, seg.start, seg.end, plan, out_path,
@@ -223,7 +244,7 @@ def run(
                 json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
             )
             clips_meta.append(meta)
-            emit("rendering", base + span, seg.title)
+            emit("rendering", base + span, seg.title, cdetail)
             if on_clip is not None:
                 try:
                     on_clip(meta)

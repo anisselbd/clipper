@@ -11,6 +11,7 @@ import {
   type Clip,
   type CreateJobInput,
   type Preflight,
+  type ProgressDetail,
 } from "@/lib/api";
 import JobForm from "@/components/JobForm";
 import Progress from "@/components/Progress";
@@ -23,12 +24,13 @@ type RunState = {
   step: string;
   progress: number;
   message: string;
+  detail: ProgressDetail | null;
   error: string | null;
 };
 
 type RunAction =
   | { type: "start" }
-  | { type: "progress"; step?: string; progress?: number; message?: string }
+  | { type: "progress"; step?: string; progress?: number; message?: string; detail?: ProgressDetail | null }
   | { type: "done" }
   | { type: "error"; error: string }
   | { type: "reset" };
@@ -38,19 +40,22 @@ const INITIAL_RUN: RunState = {
   step: "downloading",
   progress: 0,
   message: "",
+  detail: null,
   error: null,
 };
 
 function runReducer(state: RunState, action: RunAction): RunState {
   switch (action.type) {
     case "start":
-      return { phase: "running", step: "downloading", progress: 0, message: "Demarrage…", error: null };
+      return { phase: "running", step: "downloading", progress: 0, message: "Demarrage…", detail: null, error: null };
     case "progress":
       return {
         ...state,
         step: action.step ?? state.step,
         progress: action.progress ?? state.progress,
         message: action.message ?? state.message,
+        // Le detail est specifique a l'etape : on le remplace (ou l'efface si absent).
+        detail: action.detail ?? (action.step && action.step !== state.step ? null : state.detail),
       };
     case "done":
       return { ...state, phase: "done", step: "done", progress: 1 };
@@ -131,7 +136,7 @@ export default function Home() {
       esRef.current = es;
       es.addEventListener("progress", (e) => {
         const d = JSON.parse((e as MessageEvent).data);
-        dispatch({ type: "progress", step: d.step, progress: d.progress, message: d.message });
+        dispatch({ type: "progress", step: d.step, progress: d.progress, message: d.message, detail: d.detail });
       });
       es.addEventListener("clip", async () => {
         try {
@@ -191,7 +196,7 @@ export default function Home() {
       {run.phase === "running" && (
         <div className="flex flex-col gap-8">
           <div className="max-w-2xl mx-auto w-full">
-            <Progress step={run.step} progress={run.progress} message={run.message} />
+            <Progress step={run.step} progress={run.progress} message={run.message} detail={run.detail} />
           </div>
           {clips.length > 0 && (
             <ClipGrid clips={clips} running onReveal={onReveal} onReset={reset} />

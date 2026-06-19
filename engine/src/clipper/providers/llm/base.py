@@ -16,9 +16,10 @@ class LLMProvider(ABC):
     name: str = "base"
 
     @abstractmethod
-    def select_segments(self, transcript: Transcript, config: Config, audio_peaks=None) -> list:
+    def select_segments(self, transcript: Transcript, config: Config, audio_peaks=None, on_progress=None) -> list:
         """Renvoie une liste de SelectedSegment (cf. clipper.segment).
 
         audio_peaks : reactions sonores fortes optionnelles (cf. highlights).
+        on_progress : callback (fraction, detail) de progression par fenetre.
         """
         raise NotImplementedError

@@ -92,8 +92,11 @@ def transcribe(
     device: str = "cpu",
     compute_type: str = "int8",
     cache_dir: Path | None = None,
+    on_progress=None,
 ) -> Transcript:
     # Import tardif : faster-whisper (et av) sont lourds a charger.
+    import time
+
     from faster_whisper import WhisperModel
 
     cache_dir = cache_dir or video_path.parent
@@ -111,6 +114,11 @@ def transcribe(
         beam_size=5,
     )
 
+    # Duree totale connue avant d'iterer : permet une vraie progression (le
+    # generateur transcrit au fil de l'eau, on rapporte seg.end / duree).
+    total_s = float(getattr(info, "duration", 0.0)) or 0.0
+    last_emit = 0.0
+
     segments: list[TSegment] = []
     for seg in segments_iter:
         words = [
@@ -121,6 +129,14 @@ def transcribe(
         segments.append(
             TSegment(start=float(seg.start), end=float(seg.end), text=seg.text.strip(), words=words)
         )
+        if on_progress is not None and total_s > 0:
+            now = time.monotonic()
+            if now - last_emit > 0.4:  # throttle
+                last_emit = now
+                done_s = min(total_s, float(seg.end))
+                on_progress(done_s / total_s, {
+                    "kind": "transcribe", "done_s": done_s, "total_s": total_s,
+                })
 
     duration = float(getattr(info, "duration", 0.0)) or (segments[-1].end if segments else 0.0)
     logger.info(

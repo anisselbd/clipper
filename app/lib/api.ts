@@ -33,6 +33,25 @@ export type Clip = {
   social?: SocialKit | null;
 };
 
+export type ProgressDetail = {
+  kind?: "download" | "transcribe" | "select" | "render";
+  // download
+  downloaded?: number;
+  total?: number;
+  speed?: number; // octets/s
+  eta?: number; // s
+  // transcribe
+  done_s?: number;
+  total_s?: number;
+  // select
+  window?: number;
+  windows?: number;
+  // render
+  clip?: number;
+  clips?: number;
+  title?: string;
+};
+
 export type SocialKit = {
   caption?: string;
   youtube_title?: string;
